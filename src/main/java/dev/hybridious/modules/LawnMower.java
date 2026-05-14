@@ -18,15 +18,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class LawnMower extends Module {
-
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
-
     private final Setting<Integer> range = sgGeneral.add(new IntSetting.Builder()
         .name("range")
         .description("The range to search for vegetation.")
-        .defaultValue(4)
-        .min(1)
-        .max(6)
+        .defaultValue(5)
         .sliderMin(1)
         .sliderMax(6)
         .build()
@@ -36,66 +32,39 @@ public class LawnMower extends Module {
         .name("delay")
         .description("Delay between breaking blocks in ticks.")
         .defaultValue(0)
-        .min(0)
-        .max(10)
-        .sliderMin(0)
-        .sliderMax(10)
         .build()
     );
-
-    final Setting<Boolean> breakGrass = sgGeneral.add(new BoolSetting.Builder()
-        .name("break-grass")
-        .description("Break short and tall grass.")
-        .defaultValue(true)
-        .build()
+    private final Setting<Integer> bpt = sgGeneral.add(new IntSetting.Builder()
+            .name("blocks-per-tick")
+            .description("How many blocks you are allowed to break in a single tick")
+            .defaultValue(5)
+            .sliderMin(1)
+            .sliderMax(25)
+            .build()
     );
 
-    private final Setting<Boolean> breakFlowers = sgGeneral.add(new BoolSetting.Builder()
-        .name("break-flowers")
-        .description("Break all types of flowers.")
-        .defaultValue(true)
-        .build()
-    );
-
-    private final Setting<Boolean> breakSaplings = sgGeneral.add(new BoolSetting.Builder()
-        .name("break-saplings")
-        .description("Break all types of saplings.")
-        .defaultValue(true)
-        .build()
-    );
-
-    private final Setting<Boolean> breakDeadBush = sgGeneral.add(new BoolSetting.Builder()
-        .name("break-dead-bush")
-        .description("Break dead bushes.")
-        .defaultValue(true)
-        .build()
-    );
-
-    private final Setting<Boolean> breakFerns = sgGeneral.add(new BoolSetting.Builder()
-        .name("break-ferns")
-        .description("Break ferns and large ferns.")
-        .defaultValue(true)
-        .build()
-    );
-
-    private final Setting<Boolean> breakSeagrass = sgGeneral.add(new BoolSetting.Builder()
-        .name("break-seagrass")
-        .description("Break seagrass and tall seagrass.")
-        .defaultValue(false)
-        .build()
+    public final Setting<List<Block>> blocksToBreakList = sgGeneral.add(new BlockListSetting.Builder()
+         .name("blocks-to-break")
+         .description("Which blocks to break")
+         .defaultValue(Blocks.SHORT_GRASS, Blocks.TALL_GRASS, Blocks.DEAD_BUSH, Blocks.FERN, Blocks.LARGE_FERN, Blocks.SEAGRASS, Blocks.TALL_SEAGRASS,
+            Blocks.POPPY, Blocks.DANDELION, Blocks.BLUE_ORCHID, Blocks.ALLIUM, Blocks.AZURE_BLUET, Blocks.RED_TULIP, Blocks.ORANGE_TULIP,
+            Blocks.WHITE_TULIP, Blocks.PINK_TULIP, Blocks.OXEYE_DAISY, Blocks.CORNFLOWER, Blocks.LILY_OF_THE_VALLEY, Blocks.WITHER_ROSE, Blocks.SUNFLOWER,
+            Blocks.LILAC, Blocks.ROSE_BUSH, Blocks.PEONY, Blocks.ACACIA_SAPLING, Blocks.BAMBOO_SAPLING, Blocks.BIRCH_SAPLING, Blocks.CHERRY_SAPLING, Blocks.OAK_SAPLING,
+            Blocks.DARK_OAK_SAPLING, Blocks.JUNGLE_SAPLING, Blocks.PALE_OAK_SAPLING)
+         .build()
     );
 
     private final Setting<Boolean> switchToShears = sgGeneral.add(new BoolSetting.Builder()
         .name("switch-to-shears")
         .description("Automatically switch to shears when breaking vegetation.")
-        .defaultValue(true)
+        .defaultValue(false)
         .build()
     );
 
     private final Setting<Boolean> rotate = sgGeneral.add(new BoolSetting.Builder()
         .name("rotate")
         .description("Rotate towards blocks when breaking them.")
-        .defaultValue(true)
+        .defaultValue(false)
         .build()
     );
 
@@ -107,13 +76,13 @@ public class LawnMower extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
+        if (mc.player == null || mc.world == null) return;
         if (timer > 0) {
             timer--;
             return;
         }
 
         List<BlockPos> targets = findTargets();
-
         if (targets.isEmpty()) return;
 
         // Sort by closest first
@@ -123,8 +92,6 @@ public class LawnMower extends Module {
             return Double.compare(distA, distB);
         });
 
-        BlockPos target = targets.get(0);
-
         // Switch to shears if enabled and available
         if (switchToShears.get()) {
             FindItemResult shears = InvUtils.find(Items.SHEARS);
@@ -133,9 +100,15 @@ public class LawnMower extends Module {
             }
         }
 
-        // Break the block
-        if (BlockUtils.breakBlock(target, rotate.get())) {
-            timer = delay.get();
+        int amount = 0;
+        for(BlockPos target : targets) {
+            if (BlockUtils.breakBlock(target, rotate.get())) {
+                amount++;
+            }
+            if (amount >= bpt.get()) {
+                timer = delay.get();
+                break;
+            }
         }
     }
 
@@ -144,14 +117,13 @@ public class LawnMower extends Module {
 
         BlockPos playerPos = mc.player.getBlockPos();
         int r = range.get();
-
         for (int x = -r; x <= r; x++) {
             for (int y = -r; y <= r; y++) {
                 for (int z = -r; z <= r; z++) {
                     BlockPos pos = playerPos.add(x, y, z);
-                    Block block = mc.world.getBlockState(pos).getBlock();
+                    Block block = mc.world.getBlockState(playerPos.add(x, y, z)).getBlock();
 
-                    if (isTargetBlock(block)) {
+                    if (blocksToBreakList.get().contains(block)) {
                         targets.add(pos);
                     }
                 }
@@ -159,66 +131,6 @@ public class LawnMower extends Module {
         }
 
         return targets;
-    }
-
-    private boolean isTargetBlock(Block block) {
-        // Grass types
-        if (breakGrass.get()) {
-            if (block == Blocks.SHORT_GRASS || block == Blocks.TALL_GRASS) {
-                return true;
-            }
-        }
-
-        // Flowers
-        if (breakFlowers.get()) {
-            if (block instanceof FlowerBlock ||
-                block instanceof TallFlowerBlock ||
-                block == Blocks.POPPY ||
-                block == Blocks.DANDELION ||
-                block == Blocks.BLUE_ORCHID ||
-                block == Blocks.ALLIUM ||
-                block == Blocks.AZURE_BLUET ||
-                block == Blocks.RED_TULIP ||
-                block == Blocks.ORANGE_TULIP ||
-                block == Blocks.WHITE_TULIP ||
-                block == Blocks.PINK_TULIP ||
-                block == Blocks.OXEYE_DAISY ||
-                block == Blocks.CORNFLOWER ||
-                block == Blocks.LILY_OF_THE_VALLEY ||
-                block == Blocks.WITHER_ROSE ||
-                block == Blocks.SUNFLOWER ||
-                block == Blocks.LILAC ||
-                block == Blocks.ROSE_BUSH ||
-                block == Blocks.PEONY) {
-                return true;
-            }
-        }
-
-        // Saplings
-        if (breakSaplings.get() && block instanceof SaplingBlock) {
-            return true;
-        }
-
-        // Dead bush
-        if (breakDeadBush.get() && block == Blocks.DEAD_BUSH) {
-            return true;
-        }
-
-        // Ferns
-        if (breakFerns.get()) {
-            if (block == Blocks.FERN || block == Blocks.LARGE_FERN) {
-                return true;
-            }
-        }
-
-        // Seagrass
-        if (breakSeagrass.get()) {
-            if (block == Blocks.SEAGRASS || block == Blocks.TALL_SEAGRASS) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     @Override

@@ -12,6 +12,7 @@ import meteordevelopment.meteorclient.systems.modules.Modules;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
+import net.minecraft.block.Blocks;
 import net.minecraft.item.BoneMealItem;
 import net.minecraft.item.Items;
 import net.minecraft.screen.slot.SlotActionType;
@@ -157,7 +158,8 @@ public class automoss extends Module {
 
         LawnMower lawnMower = Modules.get().get(LawnMower.class);
         if (lawnMower != null) {
-            lawnMower.breakGrass.set(breakGrassForMoss.get());
+            lawnMower.blocksToBreakList.get().add(Blocks.SHORT_GRASS);
+            lawnMower.blocksToBreakList.get().add(Blocks.TALL_GRASS);
         }
 
         if (fullAuto.get()) {
@@ -233,7 +235,8 @@ public class automoss extends Module {
         // Sync LawnMower grass setting
         LawnMower lawnMower = Modules.get().get(LawnMower.class);
         if (lawnMower != null) {
-            lawnMower.breakGrass.set(breakGrassForMoss.get());
+            lawnMower.blocksToBreakList.get().add(Blocks.SHORT_GRASS);
+            lawnMower.blocksToBreakList.get().add(Blocks.TALL_GRASS);
         }
 
         // Manage baritone based on bone meal supply
