@@ -43,7 +43,7 @@ public class LawnMower extends Module {
         .build()
     );
 
-    private final Setting<Boolean> breakGrass = sgGeneral.add(new BoolSetting.Builder()
+    final Setting<Boolean> breakGrass = sgGeneral.add(new BoolSetting.Builder()
         .name("break-grass")
         .description("Break short and tall grass.")
         .defaultValue(true)
