@@ -1,20 +1,20 @@
 package dev.hybridious.modules;
 
+import baritone.api.BaritoneAPI;
 import dev.hybridious.Hybridious;
+import dev.hybridious.utils.InventoryUtils;
 import meteordevelopment.meteorclient.events.world.TickEvent;
-import meteordevelopment.meteorclient.settings.BoolSetting;
-import meteordevelopment.meteorclient.settings.DoubleSetting;
-import meteordevelopment.meteorclient.settings.IntSetting;
-import meteordevelopment.meteorclient.settings.Setting;
-import meteordevelopment.meteorclient.settings.SettingGroup;
+import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
+import net.minecraft.client.gui.screen.ingame.InventoryScreen;
 import net.minecraft.item.BoneMealItem;
 import net.minecraft.item.Items;
+import net.minecraft.registry.Registries;
 import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
@@ -51,8 +51,16 @@ public class automoss extends Module {
             .build()
     );
 
-    private final Setting<Boolean> breakGrassForMoss = sgGeneral.add(new BoolSetting.Builder()
-            .name("Toggle-LawnMower")
+    private final Setting<Block> pathfindBlock = sgGeneral.add(new BlockSetting.Builder()
+            .name("pathfind-block")
+            .description("which block to find and walk toward to automate the process with baritone.")
+            .defaultValue(Blocks.GRASS_BLOCK)
+            .visible(fullAuto::get)
+            .build()
+    );
+
+    private final Setting<Boolean> toggleLawnMower = sgGeneral.add(new BoolSetting.Builder()
+            .name("toggle-lawnMower")
             .description("Tells LawnMower to break grass so moss can spread more effectively.")
             .defaultValue(true)
             .build()
@@ -78,6 +86,20 @@ public class automoss extends Module {
             .name("inventory-allow")
             .description("Take bone meal from inventory when hotbar is empty.")
             .defaultValue(true)
+            .build()
+    );
+
+    private final Setting<Boolean> craftBoneMeal = sgGeneral.add(new BoolSetting.Builder()
+            .name("auto-craft-bonemeal")
+            .description("Automatically craft bonemeal if you are out of it and are carrying boneblocks on you")
+            .defaultValue(true)
+            .build()
+    );
+
+    private final Setting<Integer> craftingDelay = sgGeneral.add(new IntSetting.Builder()
+            .name("auto-craft-delay")
+            .description("Delay between slot movements in the inventory for crafting")
+            .defaultValue(3)
             .build()
     );
 
@@ -135,10 +157,14 @@ public class automoss extends Module {
 
     private boolean flipFlopPhase = false;
     private int flipFlopTimer = 0;
-    private boolean baritoneStopped = false;
+    private boolean baritoneActive = false;
     private boolean eatingBaritoneStop = false;
     private boolean wasEating = false;
     private int delayTimer = 0;
+    private int currentTick;
+    private boolean isCrafting;
+    private boolean movedItem;
+    private String pathFindBlockName;
     private final Map<BlockPos, Integer> recentlyUsedMoss = new HashMap<>();
     private final Map<BlockPos, Integer> azaleaCooldownMap = new HashMap<>();
 
@@ -152,43 +178,47 @@ public class automoss extends Module {
 
         flipFlopPhase = false;
         flipFlopTimer = 0;
-        baritoneStopped = false;
+        baritoneActive = false;
         eatingBaritoneStop = false;
         wasEating = false;
+        movedItem = false;
+        currentTick = 0;
+        isCrafting = false;
+        pathFindBlockName = Registries.BLOCK.getId(pathfindBlock.get()).getPath();
 
         LawnMower lawnMower = Modules.get().get(LawnMower.class);
-        if (lawnMower != null) {
-            lawnMower.blocksToBreakList.get().add(Blocks.SHORT_GRASS);
-            lawnMower.blocksToBreakList.get().add(Blocks.TALL_GRASS);
+        if (toggleLawnMower.get()) {
+            if (lawnMower != null && !lawnMower.isActive()) lawnMower.toggle();
+        }
+
+        if (flipFlop.get()) {
+            SnowClearer snowClearer = Modules.get().get(SnowClearer.class);
+            if (snowClearer != null && !snowClearer.isActive()) snowClearer.toggle();
         }
 
         if (fullAuto.get()) {
-            if (lawnMower != null && !lawnMower.isActive()) lawnMower.toggle();
-
-            SnowClearer snowClearer = Modules.get().get(SnowClearer.class);
-            if (snowClearer != null && !snowClearer.isActive()) snowClearer.toggle();
-
             mc.player.networkHandler.sendChatMessage("#settings acceptableThrowawayItems");
-            mc.player.networkHandler.sendChatMessage("#mine grass_block");
+            mc.player.networkHandler.sendChatMessage("#goto "+ pathFindBlockName);
         }
     }
 
     @Override
     public void onDeactivate() {
         if (fullAuto.get()) {
-            LawnMower lawnMower = Modules.get().get(LawnMower.class);
-            if (lawnMower != null && lawnMower.isActive()) lawnMower.toggle();
-
-            SnowClearer snowClearer = Modules.get().get(SnowClearer.class);
-            if (snowClearer != null && snowClearer.isActive()) snowClearer.toggle();
-
             if (mc.player != null) mc.player.networkHandler.sendChatMessage("#stop");
         }
+
+        LawnMower lawnMower = Modules.get().get(LawnMower.class);
+        if (lawnMower != null && lawnMower.isActive()) lawnMower.toggle();
+
+        SnowClearer snowClearer = Modules.get().get(SnowClearer.class);
+        if (snowClearer != null && snowClearer.isActive()) snowClearer.toggle();
+
         recentlyUsedMoss.clear();
         azaleaCooldownMap.clear();
-        baritoneStopped = false;
         eatingBaritoneStop = false;
         wasEating = false;
+        isCrafting = false;
     }
 
     private boolean isEatingProtectedFood() {
@@ -206,15 +236,48 @@ public class automoss extends Module {
     private void onTick(TickEvent.Pre event) {
         if (mc.player == null || mc.world == null) return;
 
+        baritoneActive = BaritoneAPI.getProvider().getPrimaryBaritone().getPathingBehavior().isPathing();
+
         // Pause all actions while eating a protected food item
         if (isEatingProtectedFood()) {
             wasEating = true;
-            if (fullAuto.get() && !eatingBaritoneStop && !baritoneStopped) {
+            if (fullAuto.get() && !eatingBaritoneStop && baritoneActive) {
                 mc.player.networkHandler.sendChatMessage("#stop");
                 eatingBaritoneStop = true;
-                baritoneStopped = true;
             }
             return;
+        }
+
+        if (craftBoneMeal.get() && !isCrafting) {
+            if (InventoryUtils.countItemsInInventory(Items.BONE_BLOCK) > 0
+                    && InventoryUtils.countItemsInInventory(Items.BONE_MEAL) == 0
+                    && InventoryUtils.countEmptySlots() > 8)
+                isCrafting = true;
+        }
+
+        if (isCrafting) {
+            if (!(mc.currentScreen instanceof InventoryScreen)) {
+                mc.setScreen(new InventoryScreen(mc.player));
+                return;
+            }
+
+            if (movedItem && currentTick >= craftingDelay.get()) {
+                // Shift-click bonemeal from crafting output into inventory
+                InventoryUtils.quickMove(mc.player.playerScreenHandler.getSlot(0));
+                currentTick = 0;
+                movedItem = false;
+                isCrafting = false;
+                mc.currentScreen.close();
+                return;
+            } else if (!movedItem && currentTick >= craftingDelay.get()) {
+                int boneBlockSlot = InventoryUtils.getSlotWithItem(Items.BONE_BLOCK);
+                // Move bone block into crafting grid
+                InventoryUtils.moveStackBetweenSlots(boneBlockSlot, 1);
+                movedItem = true;
+                currentTick = 0;
+                return;
+            }
+            currentTick++;
         }
 
         // Just finished eating — explicitly restart baritone
@@ -222,22 +285,14 @@ public class automoss extends Module {
             wasEating = false;
             if (eatingBaritoneStop) {
                 eatingBaritoneStop = false;
-                if (fullAuto.get() && countBoneMeal() > 0) {
-                    baritoneStopped = false;
-                    mc.player.networkHandler.sendChatMessage("#mine grass_block");
+                if (fullAuto.get() && countBoneMeal() > 0 && !baritoneActive) {
+                    mc.player.networkHandler.sendChatMessage("#goto "+ pathFindBlockName);
                 }
             }
         }
 
         // Always check if player is clipped into an azalea bush
         checkAndBreakStuckBlock();
-
-        // Sync LawnMower grass setting
-        LawnMower lawnMower = Modules.get().get(LawnMower.class);
-        if (lawnMower != null) {
-            lawnMower.blocksToBreakList.get().add(Blocks.SHORT_GRASS);
-            lawnMower.blocksToBreakList.get().add(Blocks.TALL_GRASS);
-        }
 
         // Manage baritone based on bone meal supply
         if (fullAuto.get() && !eatingBaritoneStop) {
@@ -340,16 +395,14 @@ public class automoss extends Module {
     }
 
     private void manageBaritoneBoneMeal() {
-        if (mc.player == null) return;
+        if (mc.player == null || mc.world == null) return;
 
         int totalBoneMeal = countBoneMeal();
 
-        if (totalBoneMeal == 0 && !baritoneStopped) {
+        if (totalBoneMeal == 0) {
             mc.player.networkHandler.sendChatMessage("#stop");
-            baritoneStopped = true;
-        } else if (totalBoneMeal > 0 && baritoneStopped) {
-            baritoneStopped = false;
-            mc.player.networkHandler.sendChatMessage("#mine grass_block");
+        } else if (totalBoneMeal > 0 && !baritoneActive) {
+            mc.player.networkHandler.sendChatMessage("#goto "+ pathFindBlockName);
         }
     }
 
