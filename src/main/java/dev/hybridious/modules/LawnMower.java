@@ -1,6 +1,7 @@
 package dev.hybridious.modules;
 
 import dev.hybridious.Hybridious;
+import dev.hybridious.utils.InventoryUtils;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Categories;
@@ -100,12 +101,15 @@ public class LawnMower extends Module {
             }
         }
 
-        int amount = 0;
-        for(BlockPos target : targets) {
-            if (BlockUtils.breakBlock(target, rotate.get())) {
-                amount++;
+        int count = 0;
+        for(BlockPos pos : targets) {
+            if (BlockUtils.canInstaBreak(pos)) {
+                InventoryUtils.sendStartBreakBlockPacket(pos);
+                count++;
+            } else if (BlockUtils.breakBlock(pos, rotate.get())) {
+                count++;
             }
-            if (amount >= bpt.get()) {
+            if (count >= bpt.get()) {
                 timer = delay.get();
                 break;
             }
@@ -113,6 +117,7 @@ public class LawnMower extends Module {
     }
 
     private List<BlockPos> findTargets() {
+        if (mc.player == null || mc.world == null) return new ArrayList<>();
         List<BlockPos> targets = new ArrayList<>();
 
         BlockPos playerPos = mc.player.getBlockPos();

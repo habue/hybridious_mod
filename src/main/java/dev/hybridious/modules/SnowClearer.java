@@ -1,6 +1,7 @@
 package dev.hybridious.modules;
 
 import dev.hybridious.Hybridious;
+import dev.hybridious.utils.InventoryUtils;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.BoolSetting;
 import meteordevelopment.meteorclient.settings.IntSetting;
@@ -14,7 +15,9 @@ import meteordevelopment.orbit.EventHandler;
 import net.minecraft.block.Block;
 import net.minecraft.block.Blocks;
 import net.minecraft.item.Items;
+import net.minecraft.network.packet.c2s.play.PlayerActionC2SPacket;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.Vec3d;
 
 import java.util.ArrayList;
@@ -27,8 +30,8 @@ public class SnowClearer extends Module {
     private final Setting<Integer> range = sgGeneral.add(new IntSetting.Builder()
             .name("range")
             .description("The range to search for snow.")
-            .defaultValue(4)
-            .min(1)
+            .defaultValue(5)
+            .sliderMin(1)
             .sliderMax(6)
             .build()
     );
@@ -37,8 +40,15 @@ public class SnowClearer extends Module {
             .name("delay")
             .description("Delay between breaking snow blocks in ticks.")
             .defaultValue(0)
-            .min(0)
-            .sliderMax(10)
+            .build()
+    );
+
+    private final Setting<Integer> bpt = sgGeneral.add(new IntSetting.Builder()
+            .name("blocks-per-tick")
+            .description("How many blocks you are allowed to break in a single tick")
+            .defaultValue(5)
+            .sliderMin(1)
+            .sliderMax(25)
             .build()
     );
 
@@ -52,7 +62,7 @@ public class SnowClearer extends Module {
     private final Setting<Boolean> rotate = sgGeneral.add(new BoolSetting.Builder()
             .name("rotate")
             .description("Rotate towards snow blocks when breaking them.")
-            .defaultValue(true)
+            .defaultValue(false)
             .build()
     );
 
@@ -89,8 +99,18 @@ public class SnowClearer extends Module {
                 mc.player.squaredDistanceTo(Vec3d.ofCenter(b))
         ));
 
-        if (BlockUtils.breakBlock(targets.get(0), rotate.get())) {
-            timer = delay.get();
+        int count = 0;
+        for(BlockPos pos : targets) {
+            if (BlockUtils.canInstaBreak(pos)) {
+                InventoryUtils.sendStartBreakBlockPacket(pos);
+                count++;
+            } else if (BlockUtils.breakBlock(pos, rotate.get())) {
+                count++;
+            }
+            if (count >= bpt.get()) {
+                timer = delay.get();
+                break;
+            }
         }
     }
 

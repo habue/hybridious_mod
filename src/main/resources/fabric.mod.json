@@ -12,6 +12,7 @@
   },
   "icon": "assets/template/icon.png",
   "environment": "client",
+  "accessWidener": "hybridious.accesswidener",
   "entrypoints": {
     "meteor": [
       "dev.hybridious.Hybridious"
