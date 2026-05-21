@@ -91,7 +91,7 @@ public class automoss extends Module {
     private final Setting<Boolean> serpentine = sgGeneral.add(new BoolSetting.Builder()
             .name("serpentine")
             .description("Mow the field in straight back-and-forth lanes (boustrophedon) instead of jumping to the farthest unvisited spot. Cleaner full-coverage pattern. Requires keep-moving.")
-            .defaultValue(true)
+            .defaultValue(false)
             .visible(() -> fullAuto.get() && keepMoving.get()).build());
 
     private final Setting<Integer> laneWidth = sgGeneral.add(new IntSetting.Builder()
@@ -211,7 +211,7 @@ public class automoss extends Module {
     private final Setting<Integer> azaleaTreeFraction = sgTrees.add(new IntSetting.Builder()
             .name("azalea-tree-fraction")
             .description("X/10 chance to bonemeal an azalea per cooldown roll.")
-            .defaultValue(10).min(1).sliderMax(10).build());
+            .defaultValue(4).min(1).sliderMax(10).build());
 
     private final Setting<Integer> azaleaCooldownSetting = sgTrees.add(new IntSetting.Builder()
             .name("azalea-cooldown")
