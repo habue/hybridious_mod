@@ -44,7 +44,7 @@ public class automoss extends Module {
     private final Setting<Boolean> fullAuto = sgGeneral.add(new BoolSetting.Builder()
             .name("full-auto")
             .description("Starts LawnMower, SnowClearer, and Baritone block-mining on activation.")
-            .defaultValue(false).build());
+            .defaultValue(true).build());
 
     private final Setting<List<Block>> pathfindBlocks = sgGeneral.add(new BlockListSetting.Builder()
             .name("pathfind-blocks")
@@ -79,7 +79,7 @@ public class automoss extends Module {
     private final Setting<Boolean> allowBreak = sgGeneral.add(new BoolSetting.Builder()
             .name("allow-break")
             .description("Let Baritone break blocks while pathing. OFF stops it from digging holes when it stops.")
-            .defaultValue(false)
+            .defaultValue(true)
             .visible(fullAuto::get).build());
 
     private final Setting<Boolean> keepMoving = sgGeneral.add(new BoolSetting.Builder()
