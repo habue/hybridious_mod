@@ -14,7 +14,7 @@ import java.util.List;
 
 public class HotbarReplenish extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
-    private final SettingGroup sgItems = settings.createGroup("Items");
+    private final SettingGroup sgItems   = settings.createGroup("Items");
 
     // ---- General behaviour ----
 
@@ -29,16 +29,8 @@ public class HotbarReplenish extends Module {
 
     private final Setting<Boolean> onlyConfigured = sgGeneral.add(new BoolSetting.Builder()
             .name("only-configured-items")
-            .description("If on, only the items in the 'Items' list below are replenished. If off, every hotbar slot is topped up using any matching item found in the inventory.")
+            .description("If on, only items in the 'Items' list are managed. If off, every hotbar slot is topped up using any matching item found in the inventory.")
             .defaultValue(true)
-            .build()
-    );
-
-    private final Setting<Boolean> fillEmptySlots = sgGeneral.add(new BoolSetting.Builder()
-            .name("fill-empty-slots")
-            .description("Also place items into hotbar slots that are completely empty (only works when a configured item is set, since an empty slot has no item to match).")
-            .defaultValue(true)
-            .visible(onlyConfigured::get)
             .build()
     );
 
@@ -51,7 +43,7 @@ public class HotbarReplenish extends Module {
 
     private final Setting<Integer> tickDelay = sgGeneral.add(new IntSetting.Builder()
             .name("tick-delay")
-            .description("Ticks to wait between each slot move. Higher is safer on anti-cheat servers like 2b2t. One move per this many ticks.")
+            .description("Ticks to wait between each slot move. Higher is safer on anti-cheat servers.")
             .defaultValue(2)
             .range(0, 20)
             .sliderRange(0, 20)
@@ -60,7 +52,7 @@ public class HotbarReplenish extends Module {
 
     private final Setting<Boolean> closeGui = sgGeneral.add(new BoolSetting.Builder()
             .name("only-when-no-screen")
-            .description("Only act when no container/inventory screen is open. Recommended on for survival anarchy servers.")
+            .description("Only act when no container/inventory screen is open. Recommended for survival anarchy servers.")
             .defaultValue(true)
             .build()
     );
@@ -69,14 +61,17 @@ public class HotbarReplenish extends Module {
 
     private final Setting<List<Item>> items = sgItems.add(new ItemListSetting.Builder()
             .name("items")
-            .description("The items to keep replenished, e.g. bone_meal. Leave empty and turn off 'only-configured-items' to replenish everything.")
+            .description("Items to keep replenished. Assigned right-to-left: first item → slot 8, second → slot 7, etc.")
             .build()
     );
 
     private int delayLeft = 0;
 
     public HotbarReplenish() {
-        super(Hybridious.CATEGORY, "hotbar-replenish", "Refills hotbar slots from your inventory when they run low. Useful for keeping bone meal, blocks, etc. topped up.");
+        super(Hybridious.CATEGORY, "hotbar-replenish",
+                "Refills hotbar slots from your inventory when they run low. " +
+                "In configured mode each listed item is pinned to a hotbar slot (slot 8 first, then 7, 6 …). " +
+                "If the slot has the wrong item it is swapped out first.");
     }
 
     @Override
@@ -87,147 +82,184 @@ public class HotbarReplenish extends Module {
     @EventHandler
     private void onTick(TickEvent.Pre event) {
         if (mc.player == null || mc.interactionManager == null) return;
-
-        // Respect open screens if asked to.
         if (closeGui.get() && mc.currentScreen != null) return;
 
-        // Per-action delay so we don't fire a burst of clicks in one tick.
         if (delayLeft > 0) {
             delayLeft--;
             return;
         }
 
-        // Walk the 9 hotbar slots (0-8) and refill the first one that needs it.
-        for (int hotbar = 0; hotbar < 9; hotbar++) {
-            if (dontReplaceHeld.get() && hotbar == mc.player.getInventory().selectedSlot) continue;
+        if (onlyConfigured.get()) {
+            // Each item in the list is pinned to a hotbar slot:
+            //   items[0] → slot 8, items[1] → slot 7, … items[8] → slot 0
+            // For each pinned slot we check three cases:
+            //   1. Slot is empty          → pull the required item in from main inventory
+            //   2. Slot has the wrong item → swap it out: send wrong item to inventory, pull required item in
+            //   3. Slot has the right item but count ≤ threshold → top it up from main inventory
+            List<Item> configuredItems = items.get();
+            int assignCount = Math.min(configuredItems.size(), 9);
 
-            ItemStack stack = mc.player.getInventory().getStack(hotbar);
+            for (int i = 0; i < assignCount; i++) {
+                int  hotbar   = 8 - i;
+                Item required = configuredItems.get(i);
+                if (required == Items.AIR) continue;
+                if (dontReplaceHeld.get() && hotbar == mc.player.getInventory().selectedSlot) continue;
 
-            if (stack.isEmpty()) {
-                // Only fill empties when we know what item belongs there (configured mode).
-                if (onlyConfigured.get() && fillEmptySlots.get()) {
-                    if (tryFillEmpty(hotbar)) {
-                        delayLeft = tickDelay.get();
-                        return;
-                    }
+                ItemStack stack = mc.player.getInventory().getStack(hotbar);
+
+                if (stack.isEmpty()) {
+                    // Case 1: empty slot — pull required item in if we have it.
+                    int src = findRefill(required);
+                    if (src == -1) continue;
+                    moveStack(src, hotbar);
+                    delayLeft = tickDelay.get();
+                    return;
                 }
-                continue;
+
+                if (!stack.isOf(required)) {
+                    // Case 2: wrong item occupying the slot.
+                    // Find a free main-inventory slot to send the wrong item to,
+                    // then pull the required item into the now-empty hotbar slot.
+                    int src = findRefill(required);
+                    if (src == -1) continue;        // nothing to pull in, skip
+                    int dest = findEmptyInvSlot();
+                    if (dest == -1) continue;       // no room to stash the wrong item, skip
+
+                    // Step A: move the wrong item out to a free inventory slot.
+                    moveStack(hotbar, dest);
+                    delayLeft = tickDelay.get();
+                    // Step B will happen on the next eligible tick once delayLeft expires.
+                    // The hotbar slot will then be empty and Case 1 will handle the rest.
+                    return;
+                }
+
+                // Case 3: correct item but below threshold — top up.
+                if (stack.getCount() > threshold.get()) continue;
+                if (stack.getCount() >= stack.getMaxCount()) continue;
+
+                int src = findRefill(required);
+                if (src == -1) continue;
+                moveStack(src, hotbar);
+                delayLeft = tickDelay.get();
+                return;
             }
+        } else {
+            // Unfiltered mode: walk slots 8 → 0, top up any stackable item below threshold.
+            for (int hotbar = 8; hotbar >= 0; hotbar--) {
+                if (dontReplaceHeld.get() && hotbar == mc.player.getInventory().selectedSlot) continue;
 
-            // Don't touch unstackable items - nothing to merge into.
-            if (stack.getMaxCount() <= 1) continue;
+                ItemStack stack = mc.player.getInventory().getStack(hotbar);
+                if (stack.isEmpty() || stack.getMaxCount() <= 1) continue;
+                if (stack.getCount() > threshold.get()) continue;
+                if (stack.getCount() >= stack.getMaxCount()) continue;
 
-            // Skip items not in our list when in configured mode.
-            if (onlyConfigured.get() && !items.get().isEmpty() && !containsItem(stack.getItem())) continue;
-
-            // Already full, or above threshold - leave it alone.
-            if (stack.getCount() > threshold.get()) continue;
-            if (stack.getCount() >= stack.getMaxCount()) continue;
-
-            // Find a matching stack elsewhere in the inventory (not hotbar slots we're filling).
-            int sourceSlot = findRefill(stack.getItem());
-            if (sourceSlot == -1) continue;
-
-            moveToHotbar(sourceSlot, hotbar);
-            delayLeft = tickDelay.get();
-            return;
+                int src = findRefill(stack.getItem());
+                if (src == -1) continue;
+                moveStack(src, hotbar);
+                delayLeft = tickDelay.get();
+                return;
+            }
         }
     }
 
-    private boolean tryFillEmpty(int hotbar) {
-        for (Item item : items.get()) {
-            if (item == Items.AIR) continue;
-            int sourceSlot = findRefill(item);
-            if (sourceSlot != -1) {
-                moveToHotbar(sourceSlot, hotbar);
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean containsItem(Item item) {
-        for (Item i : items.get()) if (i == item) return true;
-        return false;
-    }
+    // -------------------------------------------------------------------------
+    // Inventory helpers
+    // -------------------------------------------------------------------------
 
     /**
-     * Finds the best inventory slot to pull a refill from for the given item.
-     * Searches the main inventory (slots 9-35) only, so we never cannibalise another hotbar slot.
-     * Prefers the smallest non-full stack so partial stacks get consolidated first.
-     * Returns the inventory slot index, or -1 if none found.
+     * Finds the best main-inventory slot (indices 9–35) containing the given item.
+     * Prefers the smallest stack so partials get consolidated first.
      */
     private int findRefill(Item item) {
-        int bestSlot = -1;
+        int bestSlot  = -1;
         int bestCount = Integer.MAX_VALUE;
-
-        // Main inventory occupies slots 9..35 in the player inventory indexing used by getStack.
         for (int slot = 9; slot <= 35; slot++) {
             ItemStack s = mc.player.getInventory().getStack(slot);
             if (s.isEmpty() || !s.isOf(item)) continue;
-
-            // Prefer the smallest stack to consolidate partials, but any works.
             if (s.getCount() < bestCount) {
                 bestCount = s.getCount();
-                bestSlot = slot;
+                bestSlot  = slot;
             }
         }
-
         return bestSlot;
     }
 
     /**
-     * Moves the stack at the given inventory slot index onto the target hotbar slot using
-     * proper click packets, which is anti-cheat friendly on Paper/Folia servers.
-     *
-     * For an empty target we use a swap (pickup source, place on target) so the whole stack moves.
-     * For an occupied target we left-click to merge, and if anything is left on the cursor we put it
-     * back into the source slot so nothing is lost or dropped.
+     * Finds an empty slot in the main inventory (indices 9–35).
+     * Used to stash a wrong item out of a pinned hotbar slot.
      */
-    private void moveToHotbar(int fromInvSlot, int toHotbarSlot) {
+    private int findEmptyInvSlot() {
+        for (int slot = 9; slot <= 35; slot++) {
+            if (mc.player.getInventory().getStack(slot).isEmpty()) return slot;
+        }
+        return -1;
+    }
+
+    // -------------------------------------------------------------------------
+    // Click-packet helpers
+    // -------------------------------------------------------------------------
+
+    /**
+     * Moves a stack between two inventory slots using pickup click packets.
+     *
+     * - If the destination is empty: picks up the source, places it on dest. Done.
+     * - If the destination has the same item: merges (Minecraft handles the math).
+     *   Any remainder still on the cursor is returned to the source slot.
+     * - If the destination has a different item: the two stacks swap positions
+     *   (pickup src → click dest picks up dest and drops src there → pickup to
+     *   place the old-dest stack back on src). This correctly handles the
+     *   wrong-item-in-pinned-slot case.
+     */
+    private void moveStack(int fromInvSlot, int toInvSlot) {
         if (mc.player.currentScreenHandler != mc.player.playerScreenHandler) return;
 
-        // Translate raw inventory indices into screen-handler slot ids for the survival inventory.
         int fromId = invIndexToSlotId(fromInvSlot);
-        int toId = invIndexToSlotId(toHotbarSlot);
+        int toId   = invIndexToSlotId(toInvSlot);
         if (fromId < 0 || toId < 0) return;
 
-        // Pick up the source stack onto the cursor.
-        clickSlot(fromId, 0, SlotActionType.PICKUP);
+        ItemStack fromStack = mc.player.getInventory().getStack(fromInvSlot);
+        ItemStack toStack   = mc.player.getInventory().getStack(toInvSlot);
 
-        // Place onto / merge into the target.
-        clickSlot(toId, 0, SlotActionType.PICKUP);
-
-        // If the target couldn't take everything (it hit max count), the remainder is still on the
-        // cursor - put it back into the source slot so we never lose or drop items.
-        if (!mc.player.currentScreenHandler.getCursorStack().isEmpty()) {
+        if (toStack.isEmpty() || toStack.isOf(fromStack.getItem())) {
+            // Empty or same item: standard pickup → place, return any leftover.
             clickSlot(fromId, 0, SlotActionType.PICKUP);
+            clickSlot(toId,   0, SlotActionType.PICKUP);
+            if (!mc.player.currentScreenHandler.getCursorStack().isEmpty()) {
+                clickSlot(fromId, 0, SlotActionType.PICKUP);
+            }
+        } else {
+            // Different item: swap using SWAP action (hotbar key shortcut) when the
+            // destination is a hotbar slot, otherwise do a three-click cursor swap.
+            if (toInvSlot >= 0 && toInvSlot <= 8) {
+                // SWAP action: button = hotbar index, works for any slot → hotbar.
+                clickSlot(fromId, toInvSlot, SlotActionType.SWAP);
+            } else if (fromInvSlot >= 0 && fromInvSlot <= 8) {
+                // Inverse: source is hotbar, destination is main inventory.
+                clickSlot(toId, fromInvSlot, SlotActionType.SWAP);
+            } else {
+                // Both in main inventory: three-click cursor swap.
+                clickSlot(fromId, 0, SlotActionType.PICKUP); // pick up from
+                clickSlot(toId,   0, SlotActionType.PICKUP); // place on to, pick up to's old stack
+                clickSlot(fromId, 0, SlotActionType.PICKUP); // put to's old stack into from's slot
+            }
         }
     }
 
     private void clickSlot(int slotId, int button, SlotActionType action) {
         mc.interactionManager.clickSlot(
                 mc.player.currentScreenHandler.syncId,
-                slotId,
-                button,
-                action,
+                slotId, button, action,
                 mc.player
         );
     }
 
     /**
-     * Converts a player-inventory index (0-8 hotbar, 9-35 main) into the slot id used by the
-     * survival inventory screen handler. In that handler the main inventory is slot ids 9..35 (a
-     * 1:1 match with the inventory index) and the hotbar 0..8 maps to ids 36..44.
+     * Converts a player-inventory index (0–8 = hotbar, 9–35 = main) to the slot id
+     * used by the survival screen handler (hotbar 0–8 → ids 36–44; main 9–35 → ids 9–35).
      */
     private int invIndexToSlotId(int invIndex) {
-        if (invIndex >= 0 && invIndex <= 8) {
-            // Hotbar: ids 36..44 in the player screen handler.
-            return 36 + invIndex;
-        } else if (invIndex >= 9 && invIndex <= 35) {
-            // Main inventory: ids 9..35, same numbering.
-            return invIndex;
-        }
+        if (invIndex >= 0 && invIndex <= 8)  return 36 + invIndex;
+        if (invIndex >= 9 && invIndex <= 35) return invIndex;
         return -1;
     }
 }
