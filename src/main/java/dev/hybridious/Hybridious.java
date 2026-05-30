@@ -29,6 +29,9 @@ public class Hybridious extends MeteorAddon {
         Modules.get().add(new TabGuiScale()); 
         Modules.get().add(new RocketSpeed()); 
         Modules.get().add(new SnowClearer());
+        Modules.get().add(new HotbarReplenish());
+        Modules.get().add(new InventoryCleaner());
+        Modules.get().add(new ShulkerRestock());
         // Commands
         //Commands.add(new MapFilterCommand());
         Commands.add(new BannerBlacklist());
