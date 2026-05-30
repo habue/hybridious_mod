@@ -4,7 +4,28 @@ import baritone.api.BaritoneAPI;import dev.hybridious.Hybridious;import dev.hybr
 
 import java.util.ArrayList;import java.util.HashMap;import java.util.HashSet;import java.util.Iterator;import java.util.List;import java.util.Map;import java.util.Set;
 
-public class automoss extends Module {private final SettingGroup sgGeneral = settings.getDefaultGroup();private final SettingGroup sgMoss    = settings.createGroup("Moss");private final SettingGroup sgTrees   = settings.createGroup("Trees");private final SettingGroup sgUnstuck = settings.createGroup("Unstuck");private final SettingGroup sgConfine = settings.createGroup("Confine");private final SettingGroup sgReset   = settings.createGroup("Reset");
+public class automoss extends Module {private final SettingGroup sgGeneral = settings.getDefaultGroup();private final SettingGroup sgMoss    = settings.createGroup("Moss");private final SettingGroup sgTrees   = settings.createGroup("Trees");private final SettingGroup sgUnstuck = settings.createGroup("Unstuck");private final SettingGroup sgConfine = settings.createGroup("Confine");private final SettingGroup sgCompat  = settings.createGroup("Compat");private final SettingGroup sgReset   = settings.createGroup("Reset");
+
+    // -----------------------------------------------------------------------
+    // Compat settings (KillAura / external mod coexistence)
+    // -----------------------------------------------------------------------
+
+    private final Setting<Boolean> killAuraCompat = sgCompat.add(new BoolSetting.Builder()
+            .name("killaura-compat")
+            .description("Prevents AutoMoss from interpreting KillAura rotation locks and attack ticks as a Baritone stall. When ON, Baritone is never stopped just because isPathing() returns false while a combat mod appears to be active. Fixes the freeze-on-combat bug when using RusherHacks KillAura alongside AutoMoss.")
+            .defaultValue(true).build());
+
+    private final Setting<Integer> killAuraGraceTicks = sgCompat.add(new IntSetting.Builder()
+            .name("killaura-grace-ticks")
+            .description("Extra ticks added to the Baritone stall timeout while KillAura is detected as active. Baritone briefly pauses pathing during attack swings — this headroom prevents AutoMoss from misreading that pause as a stall and issuing #stop. 20 = 1 second of extra tolerance.")
+            .defaultValue(20).min(5).sliderMax(80)
+            .visible(killAuraCompat::get).build());
+
+    private final Setting<Boolean> suppressRotationConflict = sgCompat.add(new BoolSetting.Builder()
+            .name("suppress-rotation-conflict")
+            .description("When KillAura is detected, force sync-rotation-bonemeal OFF for that tick so AutoMoss never fights KillAura over the look direction. KillAura needs to own the yaw/pitch during attacks; if AutoMoss also calls Rotations.rotate() at high priority in the same tick, Baritone's movement planner can receive conflicting facing data and freeze. This suppression applies per-tick only — the setting itself is not changed.")
+            .defaultValue(true)
+            .visible(killAuraCompat::get).build());
 
     private boolean pendingResetAll = false;
 
@@ -472,6 +493,13 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
     private int                   targetCacheTTL   = 0;
     private static final int      TARGET_CACHE_TICKS = 40; // ~2 s at 20 tps
 
+    // -----------------------------------------------------------------------
+    // KillAura compat — tracks whether an external combat mod appears active
+    // this tick so stall detection and rotation logic can back off gracefully.
+    // -----------------------------------------------------------------------
+    private boolean killAuraActiveThisTick = false;
+    private int     killAuraStallBuffer    = 0; // extra grace ticks while KA is firing
+
     private Block mossBlockRef;
 
     public automoss() {
@@ -564,6 +592,10 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         cachedPatchSizes = new HashMap<>();
         targetCacheTTL   = 0;
 
+        // Reset KillAura compat state
+        killAuraActiveThisTick = false;
+        killAuraStallBuffer    = 0;
+
         enableHelper(LawnMower.class,        toggleLawnMower.get());
         enableHelper(InventoryCleaner.class, toggleInventoryCleaner.get());
         enableHelper(HotbarReplenish.class,  toggleHotbarReplenish.get());
@@ -610,6 +642,9 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         cachedTargets    = new ArrayList<>();
         cachedPatchSizes = new HashMap<>();
         targetCacheTTL   = 0;
+
+        killAuraActiveThisTick = false;
+        killAuraStallBuffer    = 0;
     }
 
     // -----------------------------------------------------------------------
@@ -976,12 +1011,54 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
     private int miningStallLimit() { return 100; }
 
     // -----------------------------------------------------------------------
+    // KillAura detection
+    // Heuristic: the player is swinging their hand at a living entity this tick,
+    // which is the signature of any KillAura/Criticals implementation.
+    // We also check if the held item is a weapon (sword/axe) as a secondary signal.
+    // This intentionally uses only vanilla client state so it works regardless of
+    // which external mod is providing the KillAura (RusherHacks, LiquidBounce, etc.)
+    // -----------------------------------------------------------------------
+
+    private boolean detectKillAuraActive() {
+        if (mc.player == null || mc.world == null) return false;
+        if (!killAuraCompat.get()) return false;
+
+        // Primary signal: player is mid-swing at a living entity in range
+        if (mc.player.handSwinging || mc.player.handSwingTicks > 0) {
+            // Check if there is any living entity the crosshair/attack could target
+            net.minecraft.util.hit.HitResult hit = mc.crosshairTarget;
+            if (hit instanceof net.minecraft.util.hit.EntityHitResult ehr) {
+                if (ehr.getEntity() instanceof net.minecraft.entity.LivingEntity) return true;
+            }
+
+            // Fallback: weapon held and swinging — very likely a KillAura swing
+            net.minecraft.item.Item held = mc.player.getMainHandStack().getItem();
+            boolean isMeleeWeapon = held instanceof net.minecraft.item.SwordItem
+                    || held instanceof net.minecraft.item.AxeItem
+                    || held instanceof net.minecraft.item.PickaxeItem;
+            if (isMeleeWeapon) {
+                // Only flag if a living entity is within 6 blocks (expanded KillAura reach)
+                for (net.minecraft.entity.Entity e : mc.world.getEntities()) {
+                    if (!(e instanceof net.minecraft.entity.LivingEntity)) continue;
+                    if (e == mc.player) continue;
+                    if (mc.player.squaredDistanceTo(e) <= 36.0) return true; // 6 block radius
+                }
+            }
+        }
+
+        return false;
+    }
+
+    // -----------------------------------------------------------------------
     // Main tick
     // -----------------------------------------------------------------------
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
         if (mc.player == null || mc.world == null) return;
+
+        // Detect KillAura activity FIRST, before any stall/rotation logic reads it.
+        killAuraActiveThisTick = detectKillAuraActive();
 
         if (breakAboveCooldown > 0) breakAboveCooldown--;
 
@@ -1074,15 +1151,31 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
             } else if (baritoneRunning) {
                 outOfMealTicks = 0;
                 if (actuallyPathing) {
-                    baritoneStallTicks = 0;
-                } else if (++baritoneStallTicks >= GOTO_GRACE_TICKS) {
-                    if (currentGotoTarget != null) markVisited(currentGotoTarget.down());
-                    baritoneRunning    = false;
-                    baritoneStallTicks = 0;
-                    idleSinceWorkTicks = GOTO_GRACE_TICKS;
-                    arrivalAgeTicks    = GOTO_GRACE_TICKS;
-                    gotoRestartCooldown = mowBeforeMoving.get()
-                            ? 0 : (keepMoving.get() ? roamRestartCooldown.get() : 60);
+                    baritoneStallTicks  = 0;
+                    killAuraStallBuffer = 0;
+                } else {
+                    // KillAura compat: if a combat mod is firing this tick, extend the
+                    // stall timeout by the configured grace amount so a brief Baritone
+                    // pause during an attack swing is never mistaken for a real stall.
+                    if (killAuraActiveThisTick && killAuraCompat.get()) {
+                        killAuraStallBuffer = Math.min(
+                                killAuraStallBuffer + killAuraGraceTicks.get(),
+                                killAuraGraceTicks.get() * 4); // cap at 4× to avoid infinite drift
+                    }
+
+                    int effectiveStallLimit = GOTO_GRACE_TICKS
+                            + (killAuraCompat.get() ? killAuraStallBuffer : 0);
+
+                    if (++baritoneStallTicks >= effectiveStallLimit) {
+                        if (currentGotoTarget != null) markVisited(currentGotoTarget.down());
+                        baritoneRunning     = false;
+                        baritoneStallTicks  = 0;
+                        killAuraStallBuffer = 0;
+                        idleSinceWorkTicks  = GOTO_GRACE_TICKS;
+                        arrivalAgeTicks     = GOTO_GRACE_TICKS;
+                        gotoRestartCooldown = mowBeforeMoving.get()
+                                ? 0 : (keepMoving.get() ? roamRestartCooldown.get() : 60);
+                    }
                 }
             } else {
                 outOfMealTicks = 0;
@@ -1145,7 +1238,10 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
             final Vec3d     hitVec = fh.hit();
             final Direction face   = fh.dir();
 
-            if (!syncRotationBonemeal.get()) {
+            if (!syncRotationBonemeal.get()
+                    || (killAuraActiveThisTick && suppressRotationConflict.get())) {
+                // Either rotation sync is OFF, or KillAura owns the look direction this tick —
+                // apply bone meal without fighting over yaw/pitch.
                 applyBonemeal(boneMealSlot, pos, hitVec, face);
             } else {
                 final BlockPos  posF         = pos;
