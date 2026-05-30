@@ -6,18 +6,11 @@ import java.util.ArrayList;import java.util.HashMap;import java.util.HashSet;imp
 
 public class automoss extends Module {private final SettingGroup sgGeneral = settings.getDefaultGroup();private final SettingGroup sgMoss    = settings.createGroup("Moss");private final SettingGroup sgTrees   = settings.createGroup("Trees");private final SettingGroup sgUnstuck = settings.createGroup("Unstuck");private final SettingGroup sgConfine = settings.createGroup("Confine");private final SettingGroup sgReset   = settings.createGroup("Reset");
 
-
-
-
-
-
-
-
     private boolean pendingResetAll = false;
 
     private final Setting<Boolean> resetAllSettings = sgReset.add(new BoolSetting.Builder()
             .name("reset-all-settings")
-            .description("Click to reset every AutoMoss setting back to its default. Toggles itself back off automatically once the reset completes (next tick).")
+            .description("Click to reset every AutoMoss setting back to its default.")
             .defaultValue(false)
             .onChanged(v -> { if (v) pendingResetAll = true; })
             .build());
@@ -28,138 +21,138 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
 
     private final Setting<Boolean> fullAuto = sgGeneral.add(new BoolSetting.Builder()
             .name("full-auto")
-            .description("Starts Baritone roaming/mining and the roam-only helpers (Unstuck, Confine, adaptive-scan) on activation. With this OFF the module is a stationary worker: it still bonemeals, seeds moss, auto-crafts, and toggles the helper modules below.")
+            .description("Starts Baritone roaming/mining and the roam-only helpers on activation.")
             .defaultValue(true).build());
 
     private final Setting<List<Block>> pathfindBlocks = sgGeneral.add(new BlockListSetting.Builder()
             .name("pathfind-blocks")
-            .description("Surface block types to roam across (e.g. stone, grass_block, dirt).")
+            .description("Surface block types to roam across.")
             .defaultValue(new ArrayList<>(List.of(Blocks.STONE, Blocks.GRASS_BLOCK, Blocks.DIRT)))
             .visible(fullAuto::get).build());
 
     private final Setting<Boolean> scanByRenderDistance = sgGeneral.add(new BoolSetting.Builder()
             .name("scan-by-render-distance")
-            .description("Derive the pathfind scan radius from the client render distance (chunks*16) instead of a fixed value. No artificial distance cap — the bot can target anything currently loaded/visible. The fixed pathfind-scan-radius below is ignored while this is on.")
+            .description("Derive the pathfind scan radius from the client render distance.")
             .defaultValue(true)
             .visible(fullAuto::get).build());
 
     private final Setting<Integer> pathfindScanRadius = sgGeneral.add(new IntSetting.Builder()
             .name("pathfind-scan-radius")
-            .description("Fixed maximum horizontal radius (blocks) to scan for pathfind targets. Only used when scan-by-render-distance is OFF. With adaptive-scan on, this is the upper bound the radius grows toward.")
+            .description("Fixed maximum horizontal radius (blocks) to scan for pathfind targets.")
             .defaultValue(16).min(2).sliderMax(256)
             .visible(() -> fullAuto.get() && !scanByRenderDistance.get()).build());
 
     private final Setting<Boolean> adaptiveScan = sgGeneral.add(new BoolSetting.Builder()
             .name("adaptive-scan")
-            .description("Grow/shrink the effective scan radius based on local work density: shrink to focus tightly when there's plenty to do nearby, grow toward the max when an area is barren so the bot reaches farther instead of darting around.")
+            .description("Grow/shrink the effective scan radius based on local work density.")
             .defaultValue(true)
             .visible(fullAuto::get).build());
 
     private final Setting<Integer> adaptiveScanMin = sgGeneral.add(new IntSetting.Builder()
             .name("adaptive-scan-min")
-            .description("Smallest radius the adaptive scan will shrink to when an area is dense with work.")
+            .description("Smallest radius the adaptive scan will shrink to.")
             .defaultValue(4).min(2).sliderMax(24)
             .visible(() -> fullAuto.get() && adaptiveScan.get()).build());
 
     private final Setting<Integer> adaptiveScanStep = sgGeneral.add(new IntSetting.Builder()
             .name("adaptive-scan-step")
-            .description("How many blocks the effective radius changes per adjustment. Smaller = smoother, slower change.")
+            .description("How many blocks the effective radius changes per adjustment.")
             .defaultValue(2).min(1).sliderMax(8)
             .visible(() -> fullAuto.get() && adaptiveScan.get()).build());
 
     private final Setting<Integer> adaptiveScanInterval = sgGeneral.add(new IntSetting.Builder()
             .name("adaptive-scan-interval")
-            .description("Ticks between adaptive radius adjustments. Higher = more gradual, calmer changes.")
+            .description("Ticks between adaptive radius adjustments.")
             .defaultValue(20).min(5).sliderMax(100)
             .visible(() -> fullAuto.get() && adaptiveScan.get()).build());
 
     private final Setting<Integer> adaptiveDenseTargets = sgGeneral.add(new IntSetting.Builder()
             .name("adaptive-dense-threshold")
-            .description("If at least this many surface targets sit within the current radius, the area is 'dense' and the radius shrinks to focus. Below it, the radius grows.")
+            .description("Target count threshold to consider the area dense.")
             .defaultValue(12).min(1).sliderMax(60)
             .visible(() -> fullAuto.get() && adaptiveScan.get()).build());
 
     private final Setting<Integer> pathfindVerticalScan = sgGeneral.add(new IntSetting.Builder()
             .name("pathfind-vertical-scan")
-            .description("Vertical range (blocks up/down) to search for the surface block in each column.")
+            .description("Vertical range (blocks up/down) to search for the surface block.")
             .defaultValue(6).min(1).sliderMax(20)
             .visible(fullAuto::get).build());
 
     private final Setting<Boolean> surfaceOnly = sgGeneral.add(new BoolSetting.Builder()
             .name("surface-only")
-            .description("Only path to blocks open to the sky. Prevents the bot from heading into caves/underground.")
+            .description("Only path to blocks open to the sky.")
             .defaultValue(true)
             .visible(fullAuto::get).build());
 
     private final Setting<Integer> maxDescend = sgGeneral.add(new IntSetting.Builder()
             .name("max-descend")
-            .description("Ignore surface targets more than this many blocks BELOW the player, so it won't chase ground far down a cliff/pillar into caves.")
+            .description("Ignore surface targets more than this many blocks below the player.")
             .defaultValue(4).min(1).sliderMax(32)
             .visible(fullAuto::get).build());
 
     private final Setting<Boolean> allowBreak = sgGeneral.add(new BoolSetting.Builder()
             .name("allow-break")
-            .description("Let Baritone break blocks while pathing. OFF stops it from digging holes when it stops.")
+            .description("Let Baritone break blocks while pathing.")
             .defaultValue(true)
             .visible(fullAuto::get).build());
 
     private final Setting<Boolean> keepMoving = sgGeneral.add(new BoolSetting.Builder()
             .name("keep-moving")
-            .description("Work the NEAREST unworked surface first and only step outward once everything close has been visited, so the bot stays local instead of darting to faraway blocks. OFF reverts to plain nearest-target with a pause.")
+            .description("Work the NEAREST unworked surface first.")
             .defaultValue(true)
             .visible(fullAuto::get).build());
 
     private final Setting<Boolean> mowBeforeMoving = sgGeneral.add(new BoolSetting.Builder()
             .name("mow-before-moving")
-            .description("After arriving at a spot, STAY until the local area is fully mossed (no more reachable bone meal/seed work) instead of waiting a fixed cooldown and leaving early. Moves on the moment the area goes quiet, so there's no idle standing and no half-finished patches. A safety cap (settle-max-ticks) still forces a move if it can never finish.")
+            .description("Stay until the local area is fully mossed before moving on.")
             .defaultValue(true)
             .visible(fullAuto::get).build());
 
     private final Setting<Integer> settleTicks = sgGeneral.add(new IntSetting.Builder()
             .name("settle-ticks")
-            .description("How many CONSECUTIVE ticks with no bone meal/seed work must pass at a stop before the area counts as 'done' and the bot moves on. Lowered to 5 to keep movement near-constant — moss has a long re-bonemeal cooldown so 5 idle ticks reliably means the patch is genuinely finished. Raise if you find the bot leaving mid-patch.")
+            .description("Consecutive idle ticks before the area counts as done.")
             .defaultValue(5).min(2).sliderMax(100)
             .visible(() -> fullAuto.get() && mowBeforeMoving.get()).build());
 
     private final Setting<Integer> settleMaxTicks = sgGeneral.add(new IntSetting.Builder()
             .name("settle-max-ticks")
-            .description("Safety cap: the most ticks the bot will ever wait at one stop before moving on regardless, in case a target is unreachable and work can't complete. 0 = no cap (wait until truly done).")
+            .description("Safety cap: max ticks to wait at one stop. 0 = no cap.")
             .defaultValue(200).min(0).sliderMax(1200)
             .visible(() -> fullAuto.get() && mowBeforeMoving.get()).build());
 
     private final Setting<Integer> roamRestartCooldown = sgGeneral.add(new IntSetting.Builder()
             .name("roam-restart-cooldown")
-            .description("Ticks to wait after arriving before heading to the next target. Only used when mow-before-moving is OFF. Lowered to 2 for near-constant movement; raise if Baritone trips on rapid #goto reissues.")
+            .description("Ticks to wait after arriving before heading to the next target.")
             .defaultValue(2).min(0).sliderMax(100)
             .visible(() -> fullAuto.get() && !mowBeforeMoving.get()).build());
 
     private final Setting<Integer> visitedRadius = sgGeneral.add(new IntSetting.Builder()
             .name("visited-radius")
-            .description("Columns within this radius of a reached target count as visited (won't immediately re-target).")
+            .description("Columns within this radius of a reached target count as visited.")
             .defaultValue(3).min(0).sliderMax(10)
             .visible(() -> fullAuto.get() && keepMoving.get()).build());
 
     private final Setting<Boolean> preferPatches = sgGeneral.add(new BoolSetting.Builder()
             .name("prefer-patches")
-            .description("Head for BIGGER clusters of mossable surface instead of isolated single blocks. Each candidate is scored by how many other mossable surfaces sit within patch-radius; lone blocks below min-patch-size are ignored entirely, and among the rest the bot favours nearby dense patches over far ones.")
+            .description("Head for bigger clusters of mossable surface.")
             .defaultValue(true)
             .visible(fullAuto::get).build());
 
     private final Setting<Integer> minPatchSize = sgGeneral.add(new IntSetting.Builder()
             .name("min-patch-size")
-            .description("Ignore a mossable target unless at least this many mossable surfaces (including itself) sit within patch-radius. 1 = target everything (don't skip singles); 3-4 = skip lone blocks and only commit to real patches. If NOTHING meets the threshold, the bot falls back to the nearest target so it never stalls.")
+            .description("Minimum cluster size to target.")
             .defaultValue(4).min(1).sliderMax(25)
             .visible(() -> fullAuto.get() && preferPatches.get()).build());
 
     private final Setting<Integer> patchRadius = sgGeneral.add(new IntSetting.Builder()
             .name("patch-radius")
-            .description("Horizontal radius (blocks) around a candidate within which other mossable surfaces are counted toward its patch size.")
+            .description("Radius around a candidate to count neighbouring mossable surfaces.")
             .defaultValue(3).min(1).sliderMax(8)
             .visible(() -> fullAuto.get() && preferPatches.get()).build());
 
     private final Setting<Boolean> stopWhenOutOfMeal = sgGeneral.add(new BoolSetting.Builder()
             .name("stop-when-out-of-meal")
-            .description("Stop pathing when out of bone meal (lets auto-craft run). OFF keeps roaming regardless.")
+            .description("Stop pathing when out of bone meal.")
             .defaultValue(true)
             .visible(fullAuto::get).build());
 
@@ -169,25 +162,24 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
             .defaultValue(true)
             .visible(fullAuto::get).build());
 
-
     private final Setting<Boolean> toggleLawnMower = sgGeneral.add(new BoolSetting.Builder()
             .name("toggle-lawnMower")
-            .description("Toggle LawnMower so grass is cleared for moss spreading. Runs whether full-auto is on or off.")
+            .description("Toggle LawnMower so grass is cleared for moss spreading.")
             .defaultValue(true).build());
 
     private final Setting<Boolean> toggleInventoryCleaner = sgGeneral.add(new BoolSetting.Builder()
             .name("toggle-inventory-cleaner")
-            .description("Toggle InventoryCleaner while AutoMoss is active so junk picked up while working is dropped. Runs whether full-auto is on or off. NOTE: can contend with auto-craft if it targets bone blocks/meal — exclude those in InventoryCleaner if you craft.")
+            .description("Toggle InventoryCleaner while AutoMoss is active.")
             .defaultValue(true).build());
 
     private final Setting<Boolean> toggleHotbarReplenish = sgGeneral.add(new BoolSetting.Builder()
             .name("toggle-hotbar-replenish")
-            .description("Toggle HotbarReplenish while AutoMoss is active so depleted hotbar stacks (bone meal, moss) are refilled from the inventory. Runs whether full-auto is on or off.")
+            .description("Toggle HotbarReplenish while AutoMoss is active.")
             .defaultValue(true).build());
 
     private final Setting<Boolean> clearSnow = sgGeneral.add(new BoolSetting.Builder()
             .name("clear-snow")
-            .description("Toggle the sibling SnowClearer module while AutoMoss is active so snow (layers + blocks) is cleared and doesn't smother moss/grass. SnowClearer does this far better than the old built-in pass. Runs whether full-auto is on or off.")
+            .description("Toggle SnowClearer while AutoMoss is active.")
             .defaultValue(false).build());
 
     private final Setting<Boolean> inventoryAllow = sgGeneral.add(new BoolSetting.Builder()
@@ -202,43 +194,43 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
 
     private final Setting<Integer> craftingDelay = sgGeneral.add(new IntSetting.Builder()
             .name("auto-craft-delay")
-            .description("Ticks to wait between crafting slot interactions. On laggy servers (2b2t/Folia) keep this high (~12-15) so window-sync packets arrive before the next click. The new state machine also waits for the SERVER to actually confirm each craft via an inventory bone-meal gain, so a too-low value here just slows things down a touch — it won't cause failed crafts the way it used to.")
+            .description("Ticks to wait between crafting slot interactions.")
             .defaultValue(12).min(2).sliderMax(40).build());
 
     private final Setting<Boolean> keepHotbarStocked = sgGeneral.add(new BoolSetting.Builder()
             .name("keep-hotbar-stocked")
-            .description("After crafting, force a full stack of bone meal into the 9th hotbar slot so the module never stalls for lack of usable meal.")
+            .description("After crafting, force a full stack of bone meal into the 9th hotbar slot.")
             .defaultValue(true).build());
 
     private final Setting<Boolean> restockFromShulkers = sgGeneral.add(new BoolSetting.Builder()
             .name("restock-from-shulkers")
-            .description("When COMPLETELY out of supplies (zero bone meal AND zero bone blocks), toggle the sibling ShulkerRestock module to pull more bone blocks from shulkers. AutoMoss pauses ALL other activity and waits for ShulkerRestock to disable itself (its own internal logic), so it isn't interrupted and never leaves a shulker box behind. Only after it finishes does the built-in auto-craft turn the blocks into bone meal. Runs whether full-auto is on or off.")
+            .description("When completely out of supplies, toggle ShulkerRestock to refill.")
             .defaultValue(true).build());
 
     private final Setting<Integer> restockTimeout = sgGeneral.add(new IntSetting.Builder()
             .name("restock-timeout")
-            .description("Safety net only. ShulkerRestock normally disables ITSELF when done and AutoMoss waits for that. This caps how many ticks AutoMoss will wait if it never self-disables (e.g. no shulkers left) before giving up. 0 = wait indefinitely (recommended, so a slow restock is never cut short). ~600 = 30s.")
+            .description("Max ticks to wait for ShulkerRestock. 0 = wait indefinitely.")
             .defaultValue(0).min(0).sliderMax(2400)
             .visible(restockFromShulkers::get).build());
 
     private final Setting<Integer> delay = sgGeneral.add(new IntSetting.Builder()
             .name("delay")
-            .description("Ticks between bone meal uses. Vanilla caps interactions at 1/tick (20/tick = 20/sec), so 1 here means ~10-20 bone meal uses/sec — well under the limit. Raise to 2-3 on very laggy servers (2b2t) if uses are being rejected, lower to 0 for full speed.")
+            .description("Ticks between bone meal uses.")
             .defaultValue(1).min(0).sliderMax(20).build());
 
     private final Setting<Integer> maxUsesPerTick = sgGeneral.add(new IntSetting.Builder()
             .name("max-uses-per-tick")
-            .description("Max bone meal uses per tick. Combined with 'delay', this lets you do quick bursts then wait. Server ceiling for interactions is 20/sec; staying at 2 with delay=1 gives ~13/sec real throughput with cushion. Push higher only if your server tolerates it.")
+            .description("Max bone meal uses per tick.")
             .defaultValue(2).min(1).sliderMax(5).build());
 
     private final Setting<Boolean> syncRotationBonemeal = sgGeneral.add(new BoolSetting.Builder()
             .name("sync-rotation-bonemeal")
-            .description("Server-sync the look direction before each bone meal use. Helps acceptance while moving on strict servers, BUT fights Baritone's own movement packets and can cause rubberbanding. Leave OFF unless bone meal is being rejected while standing still — bone meal on existing moss is validated loosely (mostly on reach), so it usually works without this.")
+            .description("Server-sync the look direction before each bone meal use.")
             .defaultValue(false).build());
 
     private final Setting<Integer> movingRotationPriority = sgGeneral.add(new IntSetting.Builder()
             .name("moving-rotation-priority")
-            .description("Rotation priority used for bone meal / seed placement WHILE MOVING (pathing or walking). The standing-still priority is fixed high (100) so strict servers accept the look; this lower value lets Baritone's own movement look win most ticks, so the camera/body barely twitches while roaming. Lower = smoother movement, slightly weaker server-side aim. Only matters when sync-rotation-bonemeal is ON.")
+            .description("Rotation priority while moving. Only used when sync-rotation-bonemeal is ON.")
             .defaultValue(10).min(0).sliderMax(100)
             .visible(syncRotationBonemeal::get).build());
 
@@ -249,35 +241,34 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
 
     private final Setting<Boolean> requireSkyAccess = sgMoss.add(new BoolSetting.Builder()
             .name("require-sky-access")
-            .description("Skip blocks buried under a thin ceiling (common on 2b2t). Requires open sky within the depth below.")
+            .description("Skip blocks buried under a ceiling.")
             .defaultValue(true).build());
 
     private final Setting<Integer> skyAccessDepth = sgMoss.add(new IntSetting.Builder()
             .name("sky-access-depth")
-            .description("Max thickness of solid blocks allowed above a target before it's considered buried.")
+            .description("Max solid blocks allowed above a target before it is considered buried.")
             .defaultValue(5).min(1).sliderMax(20)
             .visible(requireSkyAccess::get).build());
 
     private final Setting<Boolean> bonemealSideFaces = sgMoss.add(new BoolSetting.Builder()
             .name("bonemeal-all-faces")
-            .description("Bone meal moss on ANY reachable face (top, sides, or bottom), not just the top. Lets the bot spread moss whose top is blocked (under a ceiling, beside a wall, or below the player) — important in full-auto where moss is often pressed against terrain. OFF restricts bone meal to top faces only (legacy behaviour).")
+            .description("Bone meal moss on any reachable face, not just the top.")
             .defaultValue(true).build());
 
     private final Setting<Boolean> placeMoss = sgMoss.add(new BoolSetting.Builder()
             .name("place-moss")
-            .description("When no moss is in range, place ONE moss block at your feet (on a mossable block) to seed spreading.")
+            .description("When no moss is in range, place a moss block at your feet to seed spreading.")
             .defaultValue(true).build());
 
     private final Setting<Integer> placeMossDelay = sgMoss.add(new IntSetting.Builder()
             .name("place-moss-delay")
-            .description("Ticks to wait after placing a seed moss block before placing another. Lowered to 20 (1 sec) since each seed is a single server-validated placement and 5/sec of those is well under any rate limit. Raise if seeds are getting rejected on a laggy server.")
+            .description("Ticks to wait after placing a seed moss block.")
             .defaultValue(20).min(5).sliderMax(200)
             .visible(placeMoss::get).build());
 
-
     private final Setting<Boolean> mineMoss = sgMoss.add(new BoolSetting.Builder()
             .name("mine-moss-refill")
-            .description("When moss blocks run low, dispatch Baritone '#mine moss_block' to gather more, then resume roaming once restocked.")
+            .description("When moss blocks run low, dispatch Baritone to mine more.")
             .defaultValue(false)
             .visible(fullAuto::get).build());
 
@@ -308,46 +299,45 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
             .description("Ticks before re-rolling the same azalea bush.")
             .defaultValue(200).min(20).sliderMax(10000).build());
 
-
     private final Setting<Boolean> unstuckEnabled = sgUnstuck.add(new BoolSetting.Builder()
             .name("enabled")
-            .description("Detect when the bot is wedged (prone/crawling or not moving while in water) and actively free itself.")
+            .description("Detect when the bot is wedged and actively free itself.")
             .defaultValue(true)
             .visible(fullAuto::get).build());
 
     private final Setting<Boolean> breakAboveWhenProne = sgUnstuck.add(new BoolSetting.Builder()
             .name("break-above-when-prone")
-            .description("If the player is in the prone/crawling pose, break the block directly above to open headroom.")
+            .description("Break the block above to open headroom when in prone/crawling pose.")
             .defaultValue(true)
             .visible(() -> fullAuto.get() && unstuckEnabled.get()).build());
 
     private final Setting<Integer> stuckTicksBeforeAction = sgUnstuck.add(new IntSetting.Builder()
             .name("stuck-ticks")
-            .description("Ticks the player must stay (nearly) motionless before unstuck logic kicks in.")
+            .description("Ticks motionless before unstuck logic kicks in.")
             .defaultValue(40).min(10).sliderMax(200)
             .visible(() -> fullAuto.get() && unstuckEnabled.get()).build());
 
     private final Setting<Double> stuckMoveThreshold = sgUnstuck.add(new DoubleSetting.Builder()
             .name("move-threshold")
-            .description("Blocks of movement (per stuck-window) under which the player counts as 'not moving'.")
+            .description("Movement in blocks under which the player counts as stuck.")
             .defaultValue(0.6).min(0.05).sliderMax(3.0)
             .visible(() -> fullAuto.get() && unstuckEnabled.get()).build());
 
     private final Setting<Boolean> pillarOutOfWater = sgUnstuck.add(new BoolSetting.Builder()
             .name("pillar-out-of-water")
-            .description("When stuck and surrounded by water, place a block under the player and jump to pillar up out of the trap.")
+            .description("Pillar up out of water when stuck.")
             .defaultValue(true)
             .visible(() -> fullAuto.get() && unstuckEnabled.get()).build());
 
     private final Setting<Integer> pillarMaxHeight = sgUnstuck.add(new IntSetting.Builder()
             .name("pillar-max-height")
-            .description("Max blocks to pillar up in a single escape before giving up and re-pathing.")
+            .description("Max blocks to pillar up before giving up and re-pathing.")
             .defaultValue(4).min(1).sliderMax(16)
             .visible(() -> fullAuto.get() && unstuckEnabled.get()).build());
 
     private final Setting<List<Block>> pillarBlocks = sgUnstuck.add(new BlockListSetting.Builder()
             .name("pillar-blocks")
-            .description("Block types usable for pillaring out (any matching block in the hotbar/inventory will be used).")
+            .description("Block types usable for pillaring out.")
             .defaultValue(new ArrayList<>(List.of(Blocks.MOSS_BLOCK, Blocks.DIRT, Blocks.COBBLESTONE, Blocks.STONE, Blocks.NETHERRACK)))
             .visible(() -> fullAuto.get() && unstuckEnabled.get() && pillarOutOfWater.get()).build());
 
@@ -357,85 +347,61 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
             .defaultValue(4).min(1).sliderMax(20)
             .visible(() -> fullAuto.get() && unstuckEnabled.get() && pillarOutOfWater.get()).build());
 
-
     private enum SectorColumn { A, B, C, D, E, F, G, H, I, J }
 
     private final Setting<Boolean> confineEnabled = sgConfine.add(new BoolSetting.Builder()
             .name("confine-to-sector")
-            .description("Keep Baritone inside a single 1000x1000 map sector (e.g. 'A4'). Roam targets outside the sector are never chosen, and if the bot drifts out it is steered back in.")
+            .description("Keep Baritone inside a single 1000x1000 map sector.")
             .defaultValue(false)
             .visible(fullAuto::get).build());
 
     private final Setting<SectorColumn> sectorColumn = sgConfine.add(new EnumSetting.Builder<SectorColumn>()
             .name("sector-column")
-            .description("Map column (A-J), running left->right along the X axis (A = X-, J = X+).")
+            .description("Map column (A-J) along the X axis.")
             .defaultValue(SectorColumn.A)
             .visible(() -> fullAuto.get() && confineEnabled.get()).build());
 
     private final Setting<Integer> sectorRow = sgConfine.add(new IntSetting.Builder()
             .name("sector-row")
-            .description("Map row (1-10), running top->bottom along the Z axis (1 = Z-, 10 = Z+).")
+            .description("Map row (1-10) along the Z axis.")
             .defaultValue(4).min(1).max(10).sliderMin(1).sliderMax(10)
             .visible(() -> fullAuto.get() && confineEnabled.get()).build());
 
     private final Setting<Integer> sectorMargin = sgConfine.add(new IntSetting.Builder()
             .name("sector-margin")
-            .description("Shrink the usable sector box by this many blocks on every side, so the bot never paths right up to the boundary line and slips across.")
+            .description("Shrink the usable sector box by this many blocks on every side.")
             .defaultValue(8).min(0).sliderMax(64)
             .visible(() -> fullAuto.get() && confineEnabled.get()).build());
 
     private final Setting<Boolean> sectorRecenter = sgConfine.add(new BoolSetting.Builder()
             .name("recenter-if-outside")
-            .description("If the bot starts (or ends up) outside the chosen sector, issue a #goto to the sector centre to bring it back. OFF just stops it and waits.")
+            .description("Issue a #goto to the sector centre when the bot drifts out.")
             .defaultValue(true)
             .visible(() -> fullAuto.get() && confineEnabled.get()).build());
 
-
-
-
-
-
     private enum CraftState {
-        IDLE,
-        OPEN_SCREEN,
-        WAIT_SCREEN_OPEN,
-        CLEAR_CURSOR,
-        MOVE_BATCH,
-        CRAFT_BATCH,
-        VERIFY_GAIN,
-        CLEAR_GRID,
-        STOCK_HOTBAR,
-        CLOSE
+        IDLE, OPEN_SCREEN, WAIT_SCREEN_OPEN, CLEAR_CURSOR,
+        MOVE_BATCH, CRAFT_BATCH, VERIFY_GAIN, CLEAR_GRID, STOCK_HOTBAR, CLOSE
     }
 
-    private CraftState craftState         = CraftState.IDLE;
-    private CraftState lastCraftState     = CraftState.IDLE;
-    private int        craftTick          = 0;
-    private int        craftBlocksNeeded  = 0;
-    private int        craftBatchSize     = 0;
-    private int        craftFailCount     = 0;
-    private int        craftStuckTicks    = 0;
+    private CraftState craftState           = CraftState.IDLE;
+    private CraftState lastCraftState       = CraftState.IDLE;
+    private int        craftTick            = 0;
+    private int        craftBlocksNeeded    = 0;
+    private int        craftBatchSize       = 0;
+    private int        craftFailCount       = 0;
+    private int        craftStuckTicks      = 0;
     private int        reservedLeftoverSlot = -1;
-
-
-
-
-
-
-
-
-
-    private int        craftMealBefore     = 0;
-    private int        craftVerifyTicks    = 0;
-    private int        screenOpenWaitTicks = 0;
+    private int        craftMealBefore      = 0;
+    private int        craftVerifyTicks     = 0;
+    private int        screenOpenWaitTicks  = 0;
     private int        consecutiveCraftFails = 0;
 
-
-    private boolean baritoneRunning = false;
-    private boolean wasEating       = false;
-    private boolean stoppedForEat   = false;
-    private int     delayTimer      = 0;
-    private int     placeMossTimer  = 0;
+    private boolean baritoneRunning     = false;
+    private boolean wasEating           = false;
+    private boolean stoppedForEat       = false;
+    private int     delayTimer          = 0;
+    private int     placeMossTimer      = 0;
     private int     gotoRestartCooldown = 0;
     private int     pendingGotoTimer    = 0;
     private int     baritoneStallTicks  = 0;
@@ -443,67 +409,78 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
     private int     idleSinceWorkTicks  = 0;
     private int     arrivalAgeTicks     = 0;
 
-    private Boolean lastAllowBreakSent  = null;
+    private Boolean lastAllowBreakSent = null;
 
-
-    private static final int GOTO_GRACE_TICKS = 3;
-    private static final int OUT_OF_MEAL_GRACE = 20;
-
-    private static final int INV_FIRST = 9;
-    private static final int INV_LAST  = 44;
+    private static final int GOTO_GRACE_TICKS    = 3;
+    private static final int OUT_OF_MEAL_GRACE   = 20;
+    private static final int INV_FIRST           = 9;
+    private static final int INV_LAST            = 44;
     private static final int HOTBAR_FIRST_HANDLER = 36;
     private static final int BONE_MEAL_PER_BLOCK  = 9;
-
-    private static final int MIN_EMPTY_TO_CRAFT = 3;
-    private static final int CRAFT_STUCK_LIMIT = 60;
+    private static final int MIN_EMPTY_TO_CRAFT  = 3;
+    private static final int CRAFT_STUCK_LIMIT   = 60;
 
     private final Map<BlockPos, Integer> recentlyUsedMoss  = new HashMap<>();
     private final Map<BlockPos, Integer> azaleaCooldownMap = new HashMap<>();
+    private final Set<Long>              visitedColumns     = new HashSet<>();
 
-    private final Set<Long> visitedColumns = new HashSet<>();
     private BlockPos currentGotoTarget = null;
 
-    private Vec3d   lastStuckCheckPos   = null;
-    private int     stuckSampleTicks    = 0;
-    private int     immobileTicks       = 0;
-    private boolean escaping            = false;
-    private int     pillarPlaced        = 0;
-    private int     pillarStepTimer     = 0;
-    private int     pillarPhase         = 0;
-    private int     escapeBaseY         = 0;
-    private int     breakAboveCooldown  = 0;
+    private Vec3d   lastStuckCheckPos  = null;
+    private int     stuckSampleTicks   = 0;
+    private int     immobileTicks      = 0;
+    private boolean escaping           = false;
+    private int     pillarPlaced       = 0;
+    private int     pillarStepTimer    = 0;
+    private int     pillarPhase        = 0;
+    private int     escapeBaseY        = 0;
+    private int     breakAboveCooldown = 0;
 
     private boolean mineMossRunning = false;
 
-    private boolean restockRunning   = false;
-    private int     restockWaitTicks = 0;
-    private int     restockWarmup    = 0;
-    private boolean restockSeenActive = false;
+    private boolean restockRunning        = false;
+    private int     restockWaitTicks      = 0;
+    private int     restockWarmup         = 0;
+    private boolean restockSeenActive     = false;
     private int     restockInactiveStreak = 0;
 
-    private static final int RESTOCK_WARMUP_TICKS   = 20;
+    private static final int RESTOCK_WARMUP_TICKS    = 20;
     private static final int RESTOCK_INACTIVE_NEEDED = 15;
 
-    private int     miningProgressTicks = 0;
-    private int     miningStallTicks    = 0;
-    private BlockPos lastMiningTarget   = null;
-    private int     miningRecoverCooldown = 0;
+    private int      miningProgressTicks  = 0;
+    private int      miningStallTicks     = 0;
+    private BlockPos lastMiningTarget     = null;
+    private int      miningRecoverCooldown = 0;
 
-    private int     effectiveScanRadius = 0;
-    private int     adaptiveScanTimer   = 0;
+    private int effectiveScanRadius = 0;
+    private int adaptiveScanTimer   = 0;
 
-    private int     sectorConfineCooldown = 0;
+    private int sectorConfineCooldown = 0;
 
-    private double  lastRotYaw   = Double.NaN;
-    private double  lastRotPitch = Double.NaN;
+    private double lastRotYaw   = Double.NaN;
+    private double lastRotPitch = Double.NaN;
     private static final double ROT_EPSILON = 1.0;
 
+    // -----------------------------------------------------------------------
+    // Target cache — eliminates the per-jump O(r^2 * vert) world scan that
+    // caused visible lag spikes.  Both pickRoamTarget() and tickAdaptiveScan()
+    // read from this cache; findSurfaceTargets() and computePatchSizes() are
+    // only called when the TTL expires.
+    // -----------------------------------------------------------------------
+    private List<BlockPos>        cachedTargets    = new ArrayList<>();
+    private Map<BlockPos,Integer> cachedPatchSizes = new HashMap<>();
+    private int                   targetCacheTTL   = 0;
+    private static final int      TARGET_CACHE_TICKS = 40; // ~2 s at 20 tps
 
     private Block mossBlockRef;
 
     public automoss() {
         super(Hybridious.CATEGORY, "AutoMoss", "Automatically uses bone meal on specific blocks.");
     }
+
+    // -----------------------------------------------------------------------
+    // Helper-module toggles
+    // -----------------------------------------------------------------------
 
     private void enableHelper(Class<? extends Module> type, boolean wanted) {
         if (!wanted) return;
@@ -516,36 +493,40 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         if (m != null && m.isActive()) m.toggle();
     }
 
+    // -----------------------------------------------------------------------
+    // Lifecycle
+    // -----------------------------------------------------------------------
+
     @Override
     public void onActivate() {
         if (mc.player == null) return;
 
         mossBlockRef = Blocks.MOSS_BLOCK;
 
-        craftState      = CraftState.IDLE;
-        baritoneRunning = false;
-        wasEating       = false;
-        stoppedForEat   = false;
-        delayTimer      = 0;
-        placeMossTimer  = 0;
-        gotoRestartCooldown = 0;
-        pendingGotoTimer = 0;
-        baritoneStallTicks = 0;
-        outOfMealTicks = 0;
-        idleSinceWorkTicks = 0;
-        arrivalAgeTicks = 0;
-        lastAllowBreakSent = null;
-        craftBlocksNeeded = 0;
-        craftBatchSize = 0;
-        craftFailCount = 0;
-        craftStuckTicks = 0;
-        lastCraftState = CraftState.IDLE;
-        reservedLeftoverSlot = -1;
-
+        craftState            = CraftState.IDLE;
+        baritoneRunning       = false;
+        wasEating             = false;
+        stoppedForEat         = false;
+        delayTimer            = 0;
+        placeMossTimer        = 0;
+        gotoRestartCooldown   = 0;
+        pendingGotoTimer      = 0;
+        baritoneStallTicks    = 0;
+        outOfMealTicks        = 0;
+        idleSinceWorkTicks    = 0;
+        arrivalAgeTicks       = 0;
+        lastAllowBreakSent    = null;
+        craftBlocksNeeded     = 0;
+        craftBatchSize        = 0;
+        craftFailCount        = 0;
+        craftStuckTicks       = 0;
+        lastCraftState        = CraftState.IDLE;
+        reservedLeftoverSlot  = -1;
         craftMealBefore       = 0;
         craftVerifyTicks      = 0;
         screenOpenWaitTicks   = 0;
         consecutiveCraftFails = 0;
+
         visitedColumns.clear();
         currentGotoTarget = null;
 
@@ -559,8 +540,7 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         escapeBaseY        = 0;
         breakAboveCooldown = 0;
 
-        mineMossRunning = false;
-
+        mineMossRunning       = false;
         restockRunning        = false;
         restockWaitTicks      = 0;
         restockWarmup         = 0;
@@ -575,20 +555,21 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         lastRotYaw   = Double.NaN;
         lastRotPitch = Double.NaN;
 
-        effectiveScanRadius = maxScanRadius();
-        adaptiveScanTimer   = adaptiveScanInterval.get();
-
+        effectiveScanRadius   = maxScanRadius();
+        adaptiveScanTimer     = adaptiveScanInterval.get();
         sectorConfineCooldown = 0;
+
+        // Clear target cache
+        cachedTargets    = new ArrayList<>();
+        cachedPatchSizes = new HashMap<>();
+        targetCacheTTL   = 0;
 
         enableHelper(LawnMower.class,        toggleLawnMower.get());
         enableHelper(InventoryCleaner.class, toggleInventoryCleaner.get());
         enableHelper(HotbarReplenish.class,  toggleHotbarReplenish.get());
-
         enableHelper(SnowClearer.class,      clearSnow.get());
 
-        if (fullAuto.get()) {
-            startBaritone();
-        }
+        if (fullAuto.get()) startBaritone();
     }
 
     @Override
@@ -604,19 +585,18 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         recentlyUsedMoss.clear();
         azaleaCooldownMap.clear();
         visitedColumns.clear();
-        currentGotoTarget = null;
-        craftState = CraftState.IDLE;
-        lastCraftState = CraftState.IDLE;
-        craftStuckTicks = 0;
+        currentGotoTarget    = null;
+        craftState           = CraftState.IDLE;
+        lastCraftState       = CraftState.IDLE;
+        craftStuckTicks      = 0;
         reservedLeftoverSlot = -1;
-
-        craftMealBefore       = 0;
-        craftVerifyTicks      = 0;
-        screenOpenWaitTicks   = 0;
+        craftMealBefore      = 0;
+        craftVerifyTicks     = 0;
+        screenOpenWaitTicks  = 0;
         consecutiveCraftFails = 0;
 
-        escaping        = false;
-        mineMossRunning = false;
+        escaping              = false;
+        mineMossRunning       = false;
         restockRunning        = false;
         restockWaitTicks      = 0;
         restockWarmup         = 0;
@@ -625,7 +605,16 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
 
         lastRotYaw   = Double.NaN;
         lastRotPitch = Double.NaN;
+
+        // Clear target cache
+        cachedTargets    = new ArrayList<>();
+        cachedPatchSizes = new HashMap<>();
+        targetCacheTTL   = 0;
     }
+
+    // -----------------------------------------------------------------------
+    // Baritone control
+    // -----------------------------------------------------------------------
 
     private void startBaritone() {
         if (baritoneRunning || mc.player == null) return;
@@ -634,6 +623,10 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
             mc.player.jump();
             pendingGotoTimer = 2;
             baritoneRunning  = true;
+            // Invalidate the cache so the scan runs AFTER the jump animation tick,
+            // not synchronously inside this tick — that was the root cause of the
+            // jump lag spike.
+            targetCacheTTL = 0;
             return;
         }
 
@@ -670,13 +663,11 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         }
 
         currentGotoTarget = stand;
-
         syncAllowBreakIfChanged();
         mc.player.networkHandler.sendChatMessage(
                 "#goto " + stand.getX() + " " + stand.getY() + " " + stand.getZ());
         return true;
     }
-
 
     private void syncAllowBreakIfChanged() {
         if (mc.player == null) return;
@@ -686,62 +677,73 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         lastAllowBreakSent = want;
     }
 
+    // -----------------------------------------------------------------------
+    // Target cache — the core fix for the jump lag spike
+    // -----------------------------------------------------------------------
+
+    /**
+     * Returns cached surface targets, recomputing (and caching patch sizes) only
+     * when the TTL has expired.  This prevents the O(r^2 * vert) world scan and
+     * the O(n^2) patch-size computation from running on every tick — and
+     * specifically from running synchronously on the tick that includes a jump.
+     */
+    private List<BlockPos> getSurfaceTargets() {
+        if (targetCacheTTL > 0) {
+            targetCacheTTL--;
+            return cachedTargets;
+        }
+        cachedTargets = findSurfaceTargets();
+        cachedPatchSizes = preferPatches.get()
+                ? computePatchSizes(cachedTargets)
+                : new HashMap<>();
+        targetCacheTTL = TARGET_CACHE_TICKS;
+        return cachedTargets;
+    }
+
+    // -----------------------------------------------------------------------
+    // Roam-target selection
+    // -----------------------------------------------------------------------
+
     private BlockPos pickRoamTarget() {
-        List<BlockPos> surfaces = findSurfaceTargets();
+        List<BlockPos> surfaces = getSurfaceTargets(); // uses cache
         if (surfaces.isEmpty()) return null;
 
         BlockPos origin = mc.player.getBlockPos();
 
-
-
-
-
+        // Reuse patch sizes already computed in getSurfaceTargets() — no second pass.
+        Map<BlockPos, Integer> patchSize = cachedPatchSizes;
 
         List<BlockPos> eligible = surfaces;
-        Map<BlockPos, Integer> patchSize = null;
         if (preferPatches.get()) {
-            patchSize = computePatchSizes(surfaces);
             int minSize = minPatchSize.get();
             if (minSize > 1) {
                 List<BlockPos> filtered = new ArrayList<>();
                 for (BlockPos p : surfaces) {
-                    if (patchSize.get(p) >= minSize) filtered.add(p);
+                    if (patchSize.getOrDefault(p, 1) >= minSize) filtered.add(p);
                 }
                 if (!filtered.isEmpty()) eligible = filtered;
-
             }
         }
 
-
-        if (!keepMoving.get()) {
-            return pickBest(eligible, origin, patchSize, null);
-        }
-
-
+        if (!keepMoving.get()) return pickBest(eligible, origin, patchSize, null);
 
         BlockPos best = pickBest(eligible, origin, patchSize, visitedColumns);
         if (best != null) return best;
-
 
         visitedColumns.clear();
         return pickBest(eligible, origin, patchSize, null);
     }
 
-
     private BlockPos pickBest(List<BlockPos> candidates, BlockPos origin,
                               Map<BlockPos, Integer> patchSize, Set<Long> skipVisited) {
-        BlockPos best = null;
-        double bestScore = Double.MAX_VALUE;
+        BlockPos best      = null;
+        double   bestScore = Double.MAX_VALUE;
         for (BlockPos p : candidates) {
             if (skipVisited != null && skipVisited.contains(columnKey(p))) continue;
-
             double distSq = p.getSquaredDistance(origin);
-
-
-
-            double score = distSq;
+            double score  = distSq;
             if (patchSize != null) {
-                int size = patchSize.getOrDefault(p, 1);
+                int    size     = patchSize.getOrDefault(p, 1);
                 double discount = Math.min(0.5, (size - 1) * 0.04);
                 score = distSq * (1.0 - discount);
             }
@@ -750,18 +752,17 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         return best;
     }
 
-
     private Map<BlockPos, Integer> computePatchSizes(List<BlockPos> surfaces) {
         Map<BlockPos, Integer> sizes = new HashMap<>();
-        int r = patchRadius.get();
+        int r   = patchRadius.get();
         int rSq = r * r;
         for (int i = 0; i < surfaces.size(); i++) {
             BlockPos a = surfaces.get(i);
             int count = 0;
             for (int j = 0; j < surfaces.size(); j++) {
-                BlockPos b = surfaces.get(j);
-                int dx = a.getX() - b.getX();
-                int dz = a.getZ() - b.getZ();
+                BlockPos b  = surfaces.get(j);
+                int      dx = a.getX() - b.getX();
+                int      dz = a.getZ() - b.getZ();
                 if (dx * dx + dz * dz <= rSq) count++;
             }
             sizes.put(a, count);
@@ -773,30 +774,20 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         return (((long) p.getX()) << 32) ^ (p.getZ() & 0xffffffffL);
     }
 
+    // -----------------------------------------------------------------------
+    // Sector confinement
+    // -----------------------------------------------------------------------
 
     private static final int SECTOR_SIZE    = 1000;
     private static final int GRID_MIN_COORD = -5000;
 
-    private int sectorMinX() {
-        int base = GRID_MIN_COORD + sectorColumn.get().ordinal() * SECTOR_SIZE;
-        return base + sectorMargin.get();
-    }
-    private int sectorMaxX() {
-        int base = GRID_MIN_COORD + sectorColumn.get().ordinal() * SECTOR_SIZE;
-        return base + SECTOR_SIZE - 1 - sectorMargin.get();
-    }
-    private int sectorMinZ() {
-        int base = GRID_MIN_COORD + (sectorRow.get() - 1) * SECTOR_SIZE;
-        return base + sectorMargin.get();
-    }
-    private int sectorMaxZ() {
-        int base = GRID_MIN_COORD + (sectorRow.get() - 1) * SECTOR_SIZE;
-        return base + SECTOR_SIZE - 1 - sectorMargin.get();
-    }
+    private int sectorMinX() { return GRID_MIN_COORD + sectorColumn.get().ordinal() * SECTOR_SIZE + sectorMargin.get(); }
+    private int sectorMaxX() { return GRID_MIN_COORD + sectorColumn.get().ordinal() * SECTOR_SIZE + SECTOR_SIZE - 1 - sectorMargin.get(); }
+    private int sectorMinZ() { return GRID_MIN_COORD + (sectorRow.get() - 1) * SECTOR_SIZE + sectorMargin.get(); }
+    private int sectorMaxZ() { return GRID_MIN_COORD + (sectorRow.get() - 1) * SECTOR_SIZE + SECTOR_SIZE - 1 - sectorMargin.get(); }
 
     private boolean insideSector(int x, int z) {
-        return x >= sectorMinX() && x <= sectorMaxX()
-                && z >= sectorMinZ() && z <= sectorMaxZ();
+        return x >= sectorMinX() && x <= sectorMaxX() && z >= sectorMinZ() && z <= sectorMaxZ();
     }
 
     private boolean playerInsideSector() {
@@ -805,12 +796,8 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         return insideSector(b.getX(), b.getZ());
     }
 
-    private int clampX(int x) {
-        return Math.max(sectorMinX(), Math.min(x, sectorMaxX()));
-    }
-    private int clampZ(int z) {
-        return Math.max(sectorMinZ(), Math.min(z, sectorMaxZ()));
-    }
+    private int clampX(int x) { return Math.max(sectorMinX(), Math.min(x, sectorMaxX())); }
+    private int clampZ(int z) { return Math.max(sectorMinZ(), Math.min(z, sectorMaxZ())); }
 
     private BlockPos sectorCenter() {
         int cx = (sectorMinX() + sectorMaxX()) / 2;
@@ -819,26 +806,27 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         return new BlockPos(cx, cy, cz);
     }
 
+    // -----------------------------------------------------------------------
+    // Scan radius
+    // -----------------------------------------------------------------------
 
     private int maxScanRadius() {
         if (scanByRenderDistance.get()) {
             int chunks = mc.options != null ? mc.options.getViewDistance().getValue() : 8;
-
             return Math.max(16, (chunks - 1) * 16);
         }
         return pathfindScanRadius.get();
     }
 
     private List<BlockPos> findSurfaceTargets() {
-        List<BlockPos> out = new ArrayList<>();
-        List<Block> wanted = pathfindBlocks.get();
+        List<BlockPos> out    = new ArrayList<>();
+        List<Block>    wanted = pathfindBlocks.get();
         if (wanted == null || wanted.isEmpty()) return out;
 
-        BlockPos origin = mc.player.getBlockPos();
-        int horiz = currentScanRadius();
-        int vert  = pathfindVerticalScan.get();
-        int floorY = origin.getY() - 1;
-        int minTargetY = floorY - maxDescend.get();
+        BlockPos origin    = mc.player.getBlockPos();
+        int      horiz     = currentScanRadius();
+        int      vert      = pathfindVerticalScan.get();
+        int      minTargetY = origin.getY() - 1 - maxDescend.get();
 
         BlockPos.Mutable p = new BlockPos.Mutable();
         for (int dx = -horiz; dx <= horiz; dx++) {
@@ -849,12 +837,10 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
                 for (int dy = vert; dy >= -vert; dy--) {
                     p.set(origin.getX() + dx, origin.getY() + dy, origin.getZ() + dz);
                     Block b = mc.world.getBlockState(p).getBlock();
-
                     if (!wanted.contains(b)) continue;
                     if (p.getY() < minTargetY) continue;
                     if (!mc.world.getBlockState(p.up()).isAir()) continue;
                     if (surfaceOnly.get() && !isOutdoorSurface(p)) continue;
-
                     out.add(p.toImmutable());
                     break;
                 }
@@ -862,7 +848,6 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         }
         return out;
     }
-
 
     private int currentScanRadius() {
         int max = maxScanRadius();
@@ -872,10 +857,16 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         return Math.max(min, Math.min(effectiveScanRadius, max));
     }
 
+    /**
+     * Adaptive scan: invalidates the cache so getSurfaceTargets() performs a fresh
+     * scan this tick, then reads the result — ensuring the scan happens at most once
+     * per adaptive interval rather than twice (old code called findSurfaceTargets()
+     * independently here AND inside pickRoamTarget()).
+     */
     private void tickAdaptiveScan() {
         if (!adaptiveScan.get()) return;
         if (mc.player == null || mc.world == null) return;
-        int max  = maxScanRadius();
+        int max = maxScanRadius();
         if (effectiveScanRadius <= 0) effectiveScanRadius = max;
 
         if (--adaptiveScanTimer > 0) return;
@@ -884,9 +875,9 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         int min  = Math.min(adaptiveScanMin.get(), max);
         int step = adaptiveScanStep.get();
 
-
-
-        int density = findSurfaceTargets().size();
+        // Force exactly one rescan this tick; getSurfaceTargets() caches the result.
+        targetCacheTTL = 0;
+        int density = getSurfaceTargets().size();
 
         if (density >= adaptiveDenseTargets.get()) {
             effectiveScanRadius = Math.max(min, effectiveScanRadius - step);
@@ -897,12 +888,8 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
 
     private boolean isOutdoorSurface(BlockPos pos) {
         if (mc.world == null) return false;
-
-        BlockPos above = pos.up();
-        if (mc.world.isSkyVisible(above)) return true;
-
-        int ceilingScan = 64;
-        for (int dy = 1; dy <= ceilingScan; dy++) {
+        if (mc.world.isSkyVisible(pos.up())) return true;
+        for (int dy = 1; dy <= 64; dy++) {
             BlockState st = mc.world.getBlockState(pos.up(dy));
             if (st.isAir()) continue;
             if (!st.getFluidState().isEmpty()) continue;
@@ -919,11 +906,9 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
     private void markVisited(BlockPos surface) {
         if (surface == null) return;
         int r = visitedRadius.get();
-        for (int dx = -r; dx <= r; dx++) {
-            for (int dz = -r; dz <= r; dz++) {
+        for (int dx = -r; dx <= r; dx++)
+            for (int dz = -r; dz <= r; dz++)
                 visitedColumns.add(columnKey(surface.add(dx, 0, dz)));
-            }
-        }
     }
 
     private void stopBaritone() {
@@ -933,48 +918,42 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         pendingGotoTimer = 0;
     }
 
+    // -----------------------------------------------------------------------
+    // Mining stall detection
+    // -----------------------------------------------------------------------
+
     private boolean baritoneIsMining() {
         if (mc.player == null || mc.world == null || mc.interactionManager == null) return false;
         if (!baritoneRunning) return false;
-
-        boolean pathing = BaritoneAPI.getProvider().getPrimaryBaritone()
-                .getPathingBehavior().isPathing();
-        if (!pathing) return false;
+        if (!BaritoneAPI.getProvider().getPrimaryBaritone().getPathingBehavior().isPathing()) return false;
 
         if (mc.interactionManager.isBreakingBlock()) {
             if (mc.crosshairTarget != null
-                    && mc.crosshairTarget.getType() == net.minecraft.util.hit.HitResult.Type.BLOCK) {
+                    && mc.crosshairTarget.getType() == net.minecraft.util.hit.HitResult.Type.BLOCK)
                 lastMiningTarget = ((net.minecraft.util.hit.BlockHitResult) mc.crosshairTarget).getBlockPos();
-            }
             return true;
         }
 
         if (mc.crosshairTarget != null
                 && mc.crosshairTarget.getType() == net.minecraft.util.hit.HitResult.Type.BLOCK
                 && mc.player.handSwinging) {
-
             net.minecraft.util.hit.BlockHitResult bhr =
                     (net.minecraft.util.hit.BlockHitResult) mc.crosshairTarget;
             BlockPos looked = bhr.getBlockPos();
             BlockState st = mc.world.getBlockState(looked);
             if (st.isAir() || !st.getFluidState().isEmpty()) return false;
             if (st.getHardness(mc.world, looked) < 0) return false;
-
             lastMiningTarget = looked;
             return true;
         }
-
         return false;
     }
 
     private boolean tickMiningYield() {
         if (miningRecoverCooldown > 0) miningRecoverCooldown--;
-
         boolean mining = baritoneIsMining();
-
         if (mining) {
             miningProgressTicks++;
-
             if (++miningStallTicks > miningStallLimit()) {
                 if (miningRecoverCooldown <= 0 && mc.player != null) {
                     baritoneRunning = false;
@@ -989,15 +968,16 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
             }
             return true;
         }
-
         miningProgressTicks = 0;
         miningStallTicks    = 0;
         return false;
     }
 
-    private int miningStallLimit() {
-        return 100;
-    }
+    private int miningStallLimit() { return 100; }
+
+    // -----------------------------------------------------------------------
+    // Main tick
+    // -----------------------------------------------------------------------
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
@@ -1005,14 +985,10 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
 
         if (breakAboveCooldown > 0) breakAboveCooldown--;
 
-
         if (isEatingProtectedFood()) {
             if (!wasEating) {
                 wasEating = true;
-                if (baritoneRunning) {
-                    stopBaritone();
-                    stoppedForEat = true;
-                }
+                if (baritoneRunning) { stopBaritone(); stoppedForEat = true; }
             }
             return;
         }
@@ -1024,16 +1000,9 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
             }
         }
 
-
-
-
-
-
         if (pendingResetAll) {
             pendingResetAll = false;
             settings.reset();
-
-
             enableHelper(LawnMower.class,        toggleLawnMower.get());
             enableHelper(InventoryCleaner.class, toggleInventoryCleaner.get());
             enableHelper(HotbarReplenish.class,  toggleHotbarReplenish.get());
@@ -1041,23 +1010,9 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
             return;
         }
 
-
-        if (tickRestockWait()) {
-            return;
-        }
-
-
-        if (fullAuto.get() && tickMiningYield()) {
-            return;
-        }
-
-
-        if (fullAuto.get() && unstuckEnabled.get()) {
-            if (tickUnstuck()) {
-                return;
-            }
-        }
-
+        if (tickRestockWait()) return;
+        if (fullAuto.get() && tickMiningYield()) return;
+        if (fullAuto.get() && unstuckEnabled.get() && tickUnstuck()) return;
 
         if (fullAuto.get() && confineEnabled.get() && !playerInsideSector()) {
             if (sectorConfineCooldown > 0) {
@@ -1075,49 +1030,29 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
             return;
         }
 
-
         if (pendingGotoTimer > 0) {
-            if (--pendingGotoTimer == 0) {
-                if (fullAuto.get()) baritoneRunning = sendGoto();
-            }
+            if (--pendingGotoTimer == 0 && fullAuto.get()) baritoneRunning = sendGoto();
             return;
         }
 
-
-        if (craftState != CraftState.IDLE) {
-            tickCrafting();
-            return;
-        }
-
-
-        if (tryStartRestock()) {
-            return;
-        }
-
-
-        if (fullAuto.get() && tickMossMining()) {
-            return;
-        }
-
+        if (craftState != CraftState.IDLE) { tickCrafting(); return; }
+        if (tryStartRestock()) return;
+        if (fullAuto.get() && tickMossMining()) return;
 
         if (craftBoneMeal.get()
                 && countBoneMeal() == 0
                 && InventoryUtils.countItemsInInventory(Items.BONE_BLOCK) > 0
                 && inventoryEmptySlots() >= MIN_EMPTY_TO_CRAFT) {
-
             if (baritoneRunning) stopBaritone();
-
             int available = InventoryUtils.countItemsInInventory(Items.BONE_BLOCK);
             int wantToCraft = available > 1 ? available - 1 : available;
             if (wantToCraft < 1) return;
-
-            craftBlocksNeeded = wantToCraft;
-            craftState     = CraftState.OPEN_SCREEN;
-            craftTick      = 0;
-            craftFailCount = 0;
-            craftStuckTicks = 0;
+            craftBlocksNeeded   = wantToCraft;
+            craftState          = CraftState.OPEN_SCREEN;
+            craftTick           = 0;
+            craftFailCount      = 0;
+            craftStuckTicks     = 0;
             reservedLeftoverSlot = -1;
-
             craftMealBefore     = 0;
             craftVerifyTicks    = 0;
             screenOpenWaitTicks = 0;
@@ -1125,10 +1060,7 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         }
 
         checkAndBreakStuckBlock();
-
-
         if (fullAuto.get()) tickAdaptiveScan();
-
 
         if (fullAuto.get() && !stoppedForEat) {
             boolean actuallyPathing = BaritoneAPI.getProvider().getPrimaryBaritone()
@@ -1136,8 +1068,7 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
 
             if (stopWhenOutOfMeal.get() && countBoneMeal() == 0) {
                 if (baritoneRunning && ++outOfMealTicks >= OUT_OF_MEAL_GRACE) {
-                    stopBaritone();
-                    outOfMealTicks = 0;
+                    stopBaritone(); outOfMealTicks = 0;
                 }
                 baritoneStallTicks = 0;
             } else if (baritoneRunning) {
@@ -1145,32 +1076,20 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
                 if (actuallyPathing) {
                     baritoneStallTicks = 0;
                 } else if (++baritoneStallTicks >= GOTO_GRACE_TICKS) {
-
-
                     if (currentGotoTarget != null) markVisited(currentGotoTarget.down());
                     baritoneRunning    = false;
                     baritoneStallTicks = 0;
-
-
-
                     idleSinceWorkTicks = GOTO_GRACE_TICKS;
                     arrivalAgeTicks    = GOTO_GRACE_TICKS;
-
                     gotoRestartCooldown = mowBeforeMoving.get()
-                            ? 0
-                            : (keepMoving.get() ? roamRestartCooldown.get() : 60);
+                            ? 0 : (keepMoving.get() ? roamRestartCooldown.get() : 60);
                 }
             } else {
                 outOfMealTicks = 0;
                 if (mowBeforeMoving.get()) {
-
-
-
-
                     arrivalAgeTicks++;
-                    boolean areaDone = idleSinceWorkTicks >= settleTicks.get();
-                    boolean cappedOut = settleMaxTicks.get() > 0
-                            && arrivalAgeTicks >= settleMaxTicks.get();
+                    boolean areaDone  = idleSinceWorkTicks >= settleTicks.get();
+                    boolean cappedOut = settleMaxTicks.get() > 0 && arrivalAgeTicks >= settleMaxTicks.get();
                     if (areaDone || cappedOut) {
                         idleSinceWorkTicks = 0;
                         arrivalAgeTicks    = 0;
@@ -1184,69 +1103,57 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
             }
         }
 
-
         if (toggleLawnMower.get()) {
-            LawnMower lawnMower = Modules.get().get(LawnMower.class);
-            if (lawnMower != null) lawnMower.tick();
+            LawnMower lm = Modules.get().get(LawnMower.class);
+            if (lm != null) lm.tick();
         }
-
-
 
         boolean workedThisTick = false;
 
         if (placeMossTimer > 0) placeMossTimer--;
         if (placeMoss.get() && !isMossInRange()) {
-            int beforeTimer = placeMossTimer;
+            int before = placeMossTimer;
             trySeedMoss();
-
-            if (placeMossTimer > beforeTimer) workedThisTick = true;
+            if (placeMossTimer > before) workedThisTick = true;
         }
-
 
         if (delayTimer > 0) { delayTimer--; idleSinceWorkTicks = 0; return; }
 
         tickCooldowns();
 
         int boneMealSlot = findBoneMealSlot();
-
         if (boneMealSlot == -1) {
-
-
             if (workedThisTick) idleSinceWorkTicks = 0;
             return;
         }
 
         boolean moving = isMovingNow();
-
-        int uses = 0;
+        int     uses   = 0;
         for (BlockPos pos : findTargets()) {
             if (uses >= maxUsesPerTick.get()) break;
 
-            BlockState state = mc.world.getBlockState(pos);
-            boolean isMoss   = state.getBlock() == mossBlockRef;
+            BlockState state  = mc.world.getBlockState(pos);
+            boolean    isMoss = state.getBlock() == mossBlockRef;
 
             if (isMoss && recentlyUsedMoss.containsKey(pos)) continue;
-
             if (!BoneMealItem.useOnFertilizable(mc.player.getInventory().getStack(boneMealSlot), mc.world, pos))
                 continue;
 
             FaceHit fh = pickBonemealFace(pos);
             if (fh == null) continue;
 
-            final Vec3d  hitVec = fh.hit();
-            final Direction face = fh.dir();
+            final Vec3d     hitVec = fh.hit();
+            final Direction face   = fh.dir();
 
             if (!syncRotationBonemeal.get()) {
                 applyBonemeal(boneMealSlot, pos, hitVec, face);
             } else {
-                final BlockPos posF = pos;
-                final int boneMealSlotF = boneMealSlot;
-                final Direction faceF = face;
-                final Vec3d hitVecF = hitVec;
-
-                double[] yp = lookAt(hitVec);
-                int priority = moving ? movingRotationPriority.get() : 100;
-
+                final BlockPos  posF         = pos;
+                final int       boneMealSlotF = boneMealSlot;
+                final Direction faceF        = face;
+                final Vec3d     hitVecF      = hitVec;
+                double[] yp       = lookAt(hitVec);
+                int      priority = moving ? movingRotationPriority.get() : 100;
                 rotateOnce(yp[0], yp[1], priority, () -> {
                     if (mc.player == null || mc.world == null || mc.interactionManager == null) return;
                     if (mc.player.getInventory().getStack(boneMealSlotF).getItem() != Items.BONE_MEAL) return;
@@ -1257,24 +1164,25 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
             }
 
             if (isMoss) recentlyUsedMoss.put(pos, mossSpreadCooldown.get());
-
             uses++;
             workedThisTick = true;
             delayTimer = delay.get();
         }
 
-
         if (workedThisTick) idleSinceWorkTicks = 0;
         else                idleSinceWorkTicks++;
     }
+
+    // -----------------------------------------------------------------------
+    // Hotbar helpers
+    // -----------------------------------------------------------------------
 
     private int selectHotbarSynced(int slot) {
         int prev = mc.player.getInventory().selectedSlot;
         if (slot < 0 || slot > 8 || slot == prev) return prev;
         mc.player.getInventory().selectedSlot = slot;
-        if (mc.player.networkHandler != null) {
+        if (mc.player.networkHandler != null)
             mc.player.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(slot));
-        }
         return prev;
     }
 
@@ -1282,30 +1190,29 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         if (prevSlot < 0 || prevSlot > 8) return;
         if (mc.player.getInventory().selectedSlot == prevSlot) return;
         mc.player.getInventory().selectedSlot = prevSlot;
-        if (mc.player.networkHandler != null) {
+        if (mc.player.networkHandler != null)
             mc.player.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(prevSlot));
-        }
     }
 
     private void applyBonemeal(int boneMealSlot, BlockPos pos, Vec3d hitVec, Direction face) {
         if (mc.player == null || mc.interactionManager == null) return;
-        BlockHitResult hit = new BlockHitResult(hitVec, face, pos, false);
-        int prevSlot = selectHotbarSynced(boneMealSlot);
+        BlockHitResult hit  = new BlockHitResult(hitVec, face, pos, false);
+        int            prev = selectHotbarSynced(boneMealSlot);
         mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, hit);
         mc.player.swingHand(Hand.MAIN_HAND);
-        restoreHotbarSynced(prevSlot);
+        restoreHotbarSynced(prev);
     }
 
+    // -----------------------------------------------------------------------
+    // Unstuck
+    // -----------------------------------------------------------------------
 
     private boolean tickUnstuck() {
         if (mc.player == null || mc.world == null) return false;
 
         boolean prone = isProne();
         if (prone && breakAboveWhenProne.get() && breakAboveCooldown <= 0) {
-            if (breakBlockAbove()) {
-                breakAboveCooldown = 4;
-                return true;
-            }
+            if (breakBlockAbove()) { breakAboveCooldown = 4; return true; }
         }
 
         Vec3d now = mc.player.getPos();
@@ -1314,27 +1221,16 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         if (++stuckSampleTicks >= stuckTicksBeforeAction.get()) {
             double moved = horizontalDistance(lastStuckCheckPos, now)
                     + Math.abs(now.y - lastStuckCheckPos.y);
-            if (moved < stuckMoveThreshold.get()) {
-                immobileTicks += stuckSampleTicks;
-            } else {
-                immobileTicks = 0;
-                escaping = false;
-                pillarPlaced = 0;
-            }
+            if (moved < stuckMoveThreshold.get()) immobileTicks += stuckSampleTicks;
+            else { immobileTicks = 0; escaping = false; pillarPlaced = 0; }
             lastStuckCheckPos = now;
             stuckSampleTicks  = 0;
         }
 
         boolean genuinelyStuck = immobileTicks >= stuckTicksBeforeAction.get();
-
-        if (genuinelyStuck && pillarOutOfWater.get() && (touchingWater() || prone)) {
+        if (genuinelyStuck && pillarOutOfWater.get() && (touchingWater() || prone))
             return runPillarEscape();
-        }
-
-        if (escaping) {
-            return runPillarEscape();
-        }
-
+        if (escaping) return runPillarEscape();
         return false;
     }
 
@@ -1354,20 +1250,14 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
 
     private boolean breakBlockAbove() {
         if (mc.player == null || mc.world == null || mc.interactionManager == null) return false;
-
         BlockPos feet = mc.player.getBlockPos();
-        for (BlockPos above : new BlockPos[]{feet.up(), feet.up(2)}) {
+        for (BlockPos above : new BlockPos[]{ feet.up(), feet.up(2) }) {
             BlockState st = mc.world.getBlockState(above);
-            if (st.isAir()) continue;
-            if (!st.getFluidState().isEmpty()) continue;
+            if (st.isAir() || !st.getFluidState().isEmpty()) continue;
             if (st.getHardness(mc.world, above) < 0) continue;
-
             final BlockPos target = above;
-
-            Vec3d hitVec = new Vec3d(target.getX() + 0.5, target.getY() + 0.0, target.getZ() + 0.5);
-            double[] yp = lookAt(hitVec);
-
-
+            Vec3d    hitVec = new Vec3d(target.getX() + 0.5, target.getY(), target.getZ() + 0.5);
+            double[] yp     = lookAt(hitVec);
             rotateOnce(yp[0], yp[1], 100, true, () -> {
                 if (mc.player == null || mc.world == null || mc.interactionManager == null) return;
                 BlockState now = mc.world.getBlockState(target);
@@ -1382,34 +1272,22 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
 
     private boolean runPillarEscape() {
         if (mc.player == null || mc.world == null || mc.interactionManager == null) return false;
-
         if (!escaping) {
-            escaping     = true;
-            pillarPlaced = 0;
-            escapeBaseY  = mc.player.getBlockPos().getY();
-            pillarStepTimer = 0;
-            pillarPhase  = 0;
+            escaping = true; pillarPlaced = 0; escapeBaseY = mc.player.getBlockPos().getY();
+            pillarStepTimer = 0; pillarPhase = 0;
             if (baritoneRunning) stopBaritone();
         }
 
         boolean climbedOut = !touchingWater() && !isProne() && mc.player.isOnGround();
         if (climbedOut || pillarPlaced >= pillarMaxHeight.get()) {
-            escaping      = false;
-            pillarPlaced  = 0;
-            pillarPhase   = 0;
-            immobileTicks = 0;
-            stuckSampleTicks = 0;
-            lastStuckCheckPos = mc.player.getPos();
+            escaping = false; pillarPlaced = 0; pillarPhase = 0; immobileTicks = 0;
+            stuckSampleTicks = 0; lastStuckCheckPos = mc.player.getPos();
             gotoRestartCooldown = Math.max(gotoRestartCooldown, 10);
             return false;
         }
 
         int pillarSlot = findPillarBlockSlot();
-        if (pillarSlot < 0) {
-            escaping = false;
-            pillarPhase = 0;
-            return false;
-        }
+        if (pillarSlot < 0) { escaping = false; pillarPhase = 0; return false; }
 
         if (pillarPhase == 1) {
             if (pillarStepTimer > 0) { pillarStepTimer--; return true; }
@@ -1418,44 +1296,32 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
 
         if (pillarPhase == 0) {
             rotateOnce(mc.player.getYaw(), 90, 100, () -> {});
-            if (mc.player.isOnGround() || touchingWater()) {
-                mc.player.jump();
-            }
-            pillarPhase     = 1;
-            pillarStepTimer = pillarStepDelay.get();
+            if (mc.player.isOnGround() || touchingWater()) mc.player.jump();
+            pillarPhase = 1; pillarStepTimer = pillarStepDelay.get();
             return true;
         }
 
-        BlockPos feet = mc.player.getBlockPos();
+        BlockPos feet    = mc.player.getBlockPos();
         BlockPos against = null;
         for (int d = 1; d <= 3; d++) {
             BlockPos p = feet.down(d);
             BlockState s = mc.world.getBlockState(p);
             if (!s.isAir() && !s.isReplaceable() && s.getFluidState().isEmpty()) { against = p; break; }
         }
-        if (against == null) {
-            pillarPhase     = 1;
-            pillarStepTimer = pillarStepDelay.get();
-            return true;
-        }
+        if (against == null) { pillarPhase = 1; pillarStepTimer = pillarStepDelay.get(); return true; }
 
-        BlockPos placeAt = against.up();
-        BlockState placeState = mc.world.getBlockState(placeAt);
+        BlockPos   placeAt     = against.up();
+        BlockState placeState  = mc.world.getBlockState(placeAt);
         if (!placeState.isAir() && !placeState.isReplaceable()) {
-            pillarPhase     = 1;
-            pillarStepTimer = pillarStepDelay.get();
-            return true;
+            pillarPhase = 1; pillarStepTimer = pillarStepDelay.get(); return true;
         }
 
-        final BlockPos againstF = against;
-        final int pillarSlotF    = pillarSlot;
-
-        Vec3d hitVec = new Vec3d(againstF.getX() + 0.5, againstF.getY() + 1.0, againstF.getZ() + 0.5);
-        double[] yp = lookAt(hitVec);
-
+        final BlockPos againstF   = against;
+        final int      pillarSlotF = pillarSlot;
+        Vec3d    hitVec  = new Vec3d(againstF.getX() + 0.5, againstF.getY() + 1.0, againstF.getZ() + 0.5);
+        double[] yp      = lookAt(hitVec);
         final int prevSlot = mc.player.getInventory().selectedSlot;
         mc.player.getInventory().selectedSlot = pillarSlot;
-
 
         rotateOnce(yp[0], yp[1], 100, true, () -> {
             if (mc.player == null || mc.world == null || mc.interactionManager == null) return;
@@ -1467,17 +1333,13 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
             if (!at.isAir() && !at.isReplaceable()) return;
             Vec3d hv = new Vec3d(againstF.getX() + 0.5, againstF.getY() + 1.0, againstF.getZ() + 0.5);
             if (mc.player.getEyePos().squaredDistanceTo(hv) > 4.4 * 4.4) return;
-
             BlockHitResult hit = new BlockHitResult(hv, Direction.UP, againstF, false);
             mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, hit);
             mc.player.swingHand(Hand.MAIN_HAND);
         });
 
         mc.player.getInventory().selectedSlot = prevSlot;
-
-        pillarPlaced++;
-        pillarPhase     = 0;
-        pillarStepTimer = pillarStepDelay.get();
+        pillarPlaced++; pillarPhase = 0; pillarStepTimer = pillarStepDelay.get();
         return true;
     }
 
@@ -1485,12 +1347,10 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         if (mc.player == null) return -1;
         List<Block> usable = pillarBlocks.get();
         if (usable == null || usable.isEmpty()) return -1;
-
         for (int i = 0; i < 9; i++) {
             Block b = blockOfStack(i);
             if (b != null && usable.contains(b)) return i;
         }
-
         if (inventoryAllow.get()) {
             for (int inv = 9; inv < 36; inv++) {
                 Block b = blockOfStack(inv);
@@ -1521,15 +1381,13 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         return Math.sqrt(dx * dx + dz * dz);
     }
 
+    // -----------------------------------------------------------------------
+    // Moss mining
+    // -----------------------------------------------------------------------
 
     private boolean tickMossMining() {
-        if (!mineMoss.get()) {
-            if (mineMossRunning) endMossMining();
-            return false;
-        }
-
+        if (!mineMoss.get()) { if (mineMossRunning) endMossMining(); return false; }
         int mossCount = countMossBlocks();
-
         if (!mineMossRunning) {
             if (mossCount <= mossLowThreshold.get()) {
                 if (baritoneRunning) stopBaritone();
@@ -1540,28 +1398,15 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
             }
             return false;
         }
-
-        if (mossCount >= mossRefillTarget.get()) {
-            endMossMining();
-            return false;
-        }
-
-        boolean pathing = BaritoneAPI.getProvider().getPrimaryBaritone()
-                .getPathingBehavior().isPathing();
-        if (!pathing) {
-            if (!mossNearby()) {
-                endMossMining();
-                return false;
-            }
-        }
-
+        if (mossCount >= mossRefillTarget.get()) { endMossMining(); return false; }
+        boolean pathing = BaritoneAPI.getProvider().getPrimaryBaritone().getPathingBehavior().isPathing();
+        if (!pathing && !mossNearby()) { endMossMining(); return false; }
         return true;
     }
 
     private void endMossMining() {
         if (mc.player != null) mc.player.networkHandler.sendChatMessage("#stop");
-        mineMossRunning = false;
-        baritoneRunning = false;
+        mineMossRunning = false; baritoneRunning = false;
         gotoRestartCooldown = Math.max(gotoRestartCooldown, 10);
     }
 
@@ -1589,15 +1434,13 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         return false;
     }
 
+    // -----------------------------------------------------------------------
+    // Shulker restock
+    // -----------------------------------------------------------------------
 
     private boolean tickRestockWait() {
         if (!restockRunning) return false;
-
-        if (!restockFromShulkers.get()) {
-            endShulkerRestock();
-            return false;
-        }
-
+        if (!restockFromShulkers.get()) { endShulkerRestock(); return false; }
         if (baritoneRunning) stopBaritone();
         escaping = false;
 
@@ -1608,8 +1451,7 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         if (restockWarmup > 0 || !restockSeenActive) {
             restockInactiveStreak = 0;
             if (restockTimeout.get() > 0 && ++restockWaitTicks >= restockTimeout.get()) {
-                endShulkerRestock();
-                return false;
+                endShulkerRestock(); return false;
             }
             return true;
         }
@@ -1617,33 +1459,25 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         if (active) {
             restockInactiveStreak = 0;
         } else if (++restockInactiveStreak >= RESTOCK_INACTIVE_NEEDED) {
-            restockRunning        = false;
-            restockWaitTicks      = 0;
-            restockInactiveStreak = 0;
-            gotoRestartCooldown   = Math.max(gotoRestartCooldown, 10);
+            restockRunning = false; restockWaitTicks = 0; restockInactiveStreak = 0;
+            gotoRestartCooldown = Math.max(gotoRestartCooldown, 10);
             return false;
         }
 
         if (restockTimeout.get() > 0 && ++restockWaitTicks >= restockTimeout.get()) {
-            endShulkerRestock();
-            return false;
+            endShulkerRestock(); return false;
         }
-
         return true;
     }
 
     private boolean tryStartRestock() {
         if (!restockFromShulkers.get() || restockRunning) return false;
-
         if (countBoneMeal() == 0 && countBoneBlocks() == 0) {
             if (baritoneRunning) stopBaritone();
             escaping = false;
             enableHelper(ShulkerRestock.class, true);
-            restockRunning        = true;
-            restockWaitTicks      = 0;
-            restockWarmup         = RESTOCK_WARMUP_TICKS;
-            restockSeenActive     = false;
-            restockInactiveStreak = 0;
+            restockRunning = true; restockWaitTicks = 0; restockWarmup = RESTOCK_WARMUP_TICKS;
+            restockSeenActive = false; restockInactiveStreak = 0;
             return true;
         }
         return false;
@@ -1656,35 +1490,30 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
 
     private void endShulkerRestock() {
         disableHelper(ShulkerRestock.class);
-        restockRunning        = false;
-        restockWaitTicks      = 0;
-        restockWarmup         = 0;
-        restockSeenActive     = false;
-        restockInactiveStreak = 0;
+        restockRunning = false; restockWaitTicks = 0; restockWarmup = 0;
+        restockSeenActive = false; restockInactiveStreak = 0;
         gotoRestartCooldown = Math.max(gotoRestartCooldown, 10);
     }
 
-    private int countBoneBlocks() {
-        return InventoryUtils.countItemsInInventory(Items.BONE_BLOCK);
-    }
+    private int countBoneBlocks() { return InventoryUtils.countItemsInInventory(Items.BONE_BLOCK); }
 
+    // -----------------------------------------------------------------------
+    // Moss placement helpers
+    // -----------------------------------------------------------------------
 
     private boolean isMossInRange() {
         if (mc.player == null || mc.world == null) return false;
-        double rangeSq  = range.get() * range.get();
-        BlockPos origin = mc.player.getBlockPos();
-        int r           = (int) Math.ceil(range.get());
-
+        double   rangeSq = range.get() * range.get();
+        BlockPos origin  = mc.player.getBlockPos();
+        int      r       = (int) Math.ceil(range.get());
         BlockPos.Mutable p = new BlockPos.Mutable();
-        for (int x = -r; x <= r; x++) {
-            for (int y = -r; y <= r; y++) {
+        for (int x = -r; x <= r; x++)
+            for (int y = -r; y <= r; y++)
                 for (int z = -r; z <= r; z++) {
                     p.set(origin.getX() + x, origin.getY() + y, origin.getZ() + z);
                     if (p.getSquaredDistance(origin) > rangeSq) continue;
                     if (mc.world.getBlockState(p).getBlock() == mossBlockRef) return true;
                 }
-            }
-        }
         return false;
     }
 
@@ -1700,70 +1529,54 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
     private void trySeedMoss() {
         if (mc.player == null || mc.world == null || mc.interactionManager == null) return;
         if (placeMossTimer > 0) return;
-
         int mossSlot = findMossBlockSlot();
         if (mossSlot < 0 || mossSlot >= 9) return;
 
         BlockPos feet = mc.player.getBlockPos();
-        BlockPos[] floors = new BlockPos[]{
-                feet.down(),
-                feet.down().north(), feet.down().south(),
-                feet.down().east(),  feet.down().west(),
+        BlockPos[] floors = {
+                feet.down(), feet.down().north(), feet.down().south(),
+                feet.down().east(), feet.down().west(),
                 feet.down().north().east(), feet.down().north().west(),
                 feet.down().south().east(), feet.down().south().west()
         };
 
-        Vec3d eye = mc.player.getEyePos();
+        Vec3d        eye        = mc.player.getEyePos();
         final double maxReach   = Math.min(range.get(), 4.4);
-        final double maxReachSq  = maxReach * maxReach;
+        final double maxReachSq = maxReach * maxReach;
 
-        BlockPos bestFloor = null;
-        Vec3d    bestHit   = null;
+        BlockPos bestFloor  = null;
+        Vec3d    bestHit    = null;
         double   bestDistSq = Double.MAX_VALUE;
 
         for (BlockPos floor : floors) {
             if (!isMossableSurface(mc.world.getBlockState(floor))) continue;
-
-            BlockPos placeAt = floor.up();
-            BlockState atState = mc.world.getBlockState(placeAt);
+            BlockPos   placeAt  = floor.up();
+            BlockState atState  = mc.world.getBlockState(placeAt);
             if (!atState.isAir() && !atState.isReplaceable()) continue;
             if (placeAt.equals(feet) || placeAt.equals(feet.up())) continue;
-
-            Vec3d hitVec = topFaceHitToward(floor, eye);
-
+            Vec3d  hitVec = topFaceHitToward(floor, eye);
             double distSq = eye.squaredDistanceTo(hitVec);
             if (distSq > maxReachSq) continue;
-
             if (!hasLineOfSightTo(floor, hitVec)) continue;
-
-            if (distSq < bestDistSq) {
-                bestDistSq = distSq;
-                bestFloor  = floor;
-                bestHit    = hitVec;
-            }
+            if (distSq < bestDistSq) { bestDistSq = distSq; bestFloor = floor; bestHit = hitVec; }
         }
-
         if (bestFloor == null) return;
-
         placeMossNow(bestFloor, bestHit, mossSlot);
     }
 
     private Vec3d topFaceHitToward(BlockPos floor, Vec3d eye) {
-        double cx = floor.getX() + 0.5;
-        double cz = floor.getZ() + 0.5;
-        double topY = floor.getY() + 1.0;
-        double nx = clamp01face(0.5 + Math.signum(eye.x - cx) * 0.25);
-        double nz = clamp01face(0.5 + Math.signum(eye.z - cz) * 0.25);
-        return new Vec3d(floor.getX() + nx, topY, floor.getZ() + nz);
+        double cx = floor.getX() + 0.5, cz = floor.getZ() + 0.5;
+        return new Vec3d(
+                floor.getX() + clamp01face(0.5 + Math.signum(eye.x - cx) * 0.25),
+                floor.getY() + 1.0,
+                floor.getZ() + clamp01face(0.5 + Math.signum(eye.z - cz) * 0.25));
     }
 
-    private static double clamp01face(double v) {
-        return Math.max(0.15, Math.min(0.85, v));
-    }
+    private static double clamp01face(double v) { return Math.max(0.15, Math.min(0.85, v)); }
 
     private boolean hasLineOfSightTo(BlockPos block, Vec3d point) {
         if (mc.player == null || mc.world == null) return false;
-        Vec3d eye = mc.player.getEyePos();
+        Vec3d          eye = mc.player.getEyePos();
         RaycastContext ctx = new RaycastContext(eye, point,
                 RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player);
         BlockPos hit = mc.world.raycast(ctx).getBlockPos();
@@ -1774,13 +1587,10 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         if (mc.player == null || mc.world == null || mc.interactionManager == null) return;
         if (mossSlot < 0 || mossSlot >= 9) return;
         if (mc.player.getInventory().getStack(mossSlot).getItem() != Items.MOSS_BLOCK) return;
-
         double[] yp = lookAt(hitVec);
-
         final BlockPos floorF   = floor;
-        final Vec3d    hitVecF   = hitVec;
+        final Vec3d    hitVecF  = hitVec;
         final int      mossSlotF = mossSlot;
-
         int priority = isMovingNow() ? movingRotationPriority.get() : 100;
         rotateOnce(yp[0], yp[1], priority, true, () -> {
             if (mc.player == null || mc.world == null || mc.interactionManager == null) return;
@@ -1789,34 +1599,26 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
             if (!at.isAir() && !at.isReplaceable()) return;
             if (mc.player.getInventory().getStack(mossSlotF).getItem() != Items.MOSS_BLOCK) return;
             if (mc.player.getEyePos().squaredDistanceTo(hitVecF) > 4.4 * 4.4) return;
-
-            int prevSlot = selectHotbarSynced(mossSlotF);
-
-            BlockHitResult hit = new BlockHitResult(hitVecF, Direction.UP, floorF, false);
-            mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, hit);
+            int prev = selectHotbarSynced(mossSlotF);
+            mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND,
+                    new BlockHitResult(hitVecF, Direction.UP, floorF, false));
             mc.player.swingHand(Hand.MAIN_HAND);
-
-            restoreHotbarSynced(prevSlot);
+            restoreHotbarSynced(prev);
         });
-
         placeMossTimer = placeMossDelay.get();
     }
 
     private int findMossBlockSlot() {
         if (mc.player == null) return -1;
-
         for (int i = 0; i < 9; i++)
             if (mc.player.getInventory().getStack(i).getItem() == Items.MOSS_BLOCK) return i;
-
         if (inventoryAllow.get()) {
             for (int inv = 9; inv < 36; inv++) {
                 if (mc.player.getInventory().getStack(inv).getItem() != Items.MOSS_BLOCK) continue;
                 for (int hot = 0; hot < 9; hot++) {
                     if (!mc.player.getInventory().getStack(hot).isEmpty()) continue;
-                    int handlerSlot = playerInvToHandlerSlot(inv);
-                    mc.interactionManager.clickSlot(
-                            mc.player.playerScreenHandler.syncId, handlerSlot, hot,
-                            SlotActionType.SWAP, mc.player);
+                    mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId,
+                            playerInvToHandlerSlot(inv), hot, SlotActionType.SWAP, mc.player);
                     return hot;
                 }
                 break;
@@ -1826,200 +1628,117 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
     }
 
     private int playerInvToHandlerSlot(int invIndex) {
-        if (invIndex >= 9) return invIndex;
-        return 36 + invIndex;
+        return invIndex >= 9 ? invIndex : 36 + invIndex;
     }
+
+    // -----------------------------------------------------------------------
+    // Crafting state machine
+    // -----------------------------------------------------------------------
 
     private void tickCrafting() {
         craftTick++;
         int syncId = mc.player.playerScreenHandler.syncId;
-
-        if (craftState != lastCraftState) {
-            craftStuckTicks = 0;
-            lastCraftState  = craftState;
-        }
-
+        if (craftState != lastCraftState) { craftStuckTicks = 0; lastCraftState = craftState; }
         int stuckLimit = Math.max(CRAFT_STUCK_LIMIT, craftingDelay.get() * 12);
-        if (++craftStuckTicks > stuckLimit) {
-            emergencyCraftAbort(syncId);
-            return;
-        }
+        if (++craftStuckTicks > stuckLimit) { emergencyCraftAbort(syncId); return; }
 
         switch (craftState) {
             case OPEN_SCREEN -> {
-                if (!(mc.currentScreen instanceof InventoryScreen)) {
+                if (!(mc.currentScreen instanceof InventoryScreen))
                     mc.setScreen(new InventoryScreen(mc.player));
-                }
                 screenOpenWaitTicks = 0;
-                craftState = CraftState.WAIT_SCREEN_OPEN;
-                craftTick  = 0;
+                craftState = CraftState.WAIT_SCREEN_OPEN; craftTick = 0;
             }
-
             case WAIT_SCREEN_OPEN -> {
                 screenOpenWaitTicks++;
                 if (!(mc.currentScreen instanceof InventoryScreen)) {
-                    mc.setScreen(new InventoryScreen(mc.player));
-                    screenOpenWaitTicks = 0;
-                    return;
+                    mc.setScreen(new InventoryScreen(mc.player)); screenOpenWaitTicks = 0; return;
                 }
                 if (screenOpenWaitTicks < craftingDelay.get()) return;
-                craftState = CraftState.CLEAR_CURSOR;
-                craftTick  = 0;
+                craftState = CraftState.CLEAR_CURSOR; craftTick = 0;
             }
-
             case CLEAR_CURSOR -> {
                 if (craftTick < craftingDelay.get()) return;
                 if (!mc.player.playerScreenHandler.getCursorStack().isEmpty()) {
                     int dest = findEmptyInventoryScreenSlotExcluding(-1);
-                    if (dest != -1) {
-                        mc.interactionManager.clickSlot(syncId, dest, 0, SlotActionType.PICKUP, mc.player);
-                    } else {
-                        emergencyCraftAbort(syncId);
-                        return;
-                    }
-                    craftTick = 0;
-                    return;
+                    if (dest != -1) mc.interactionManager.clickSlot(syncId, dest, 0, SlotActionType.PICKUP, mc.player);
+                    else { emergencyCraftAbort(syncId); return; }
+                    craftTick = 0; return;
                 }
-                craftState = CraftState.MOVE_BATCH;
-                craftTick  = 0;
+                craftState = CraftState.MOVE_BATCH; craftTick = 0;
             }
-
             case MOVE_BATCH -> {
                 if (craftTick < craftingDelay.get()) return;
-
                 if (slotItem(1) == Items.BONE_BLOCK) {
-                    craftBatchSize  = mc.player.playerScreenHandler.getSlot(1).getStack().getCount();
+                    craftBatchSize = mc.player.playerScreenHandler.getSlot(1).getStack().getCount();
                     craftMealBefore = countBoneMeal();
-                    craftState      = CraftState.CRAFT_BATCH;
-                    craftTick       = 0;
-                    return;
+                    craftState = CraftState.CRAFT_BATCH; craftTick = 0; return;
                 }
-
-                if (craftBlocksNeeded <= 0) {
-                    craftState = CraftState.CLEAR_GRID;
-                    craftTick  = 0;
-                    return;
-                }
-
+                if (craftBlocksNeeded <= 0) { craftState = CraftState.CLEAR_GRID; craftTick = 0; return; }
                 int maxBatch = consecutiveCraftFails > 0
-                        ? Math.max(8, 64 >> Math.min(consecutiveCraftFails, 3))
-                        : 64;
-
+                        ? Math.max(8, 64 >> Math.min(consecutiveCraftFails, 3)) : 64;
                 int free = countEmptyInventoryScreenSlotsExcluding(-1);
-                if (free < 1) {
-                    emergencyCraftAbort(syncId);
-                    return;
-                }
-                int fitBySpace = free * 6;
-
+                if (free < 1) { emergencyCraftAbort(syncId); return; }
                 int srcSlot = findBoneBlockScreenSlot(-1);
-                if (srcSlot == -1) {
-                    craftState = CraftState.CLEAR_GRID;
-                    craftTick  = 0;
-                    return;
-                }
-
+                if (srcSlot == -1) { craftState = CraftState.CLEAR_GRID; craftTick = 0; return; }
                 int stackCount = mc.player.playerScreenHandler.getSlot(srcSlot).getStack().getCount();
-                int batch = Math.min(Math.min(maxBatch, Math.min(fitBySpace, craftBlocksNeeded)),
+                int batch = Math.min(Math.min(maxBatch, Math.min(free * 6, craftBlocksNeeded)),
                         Math.min(64, stackCount));
-                if (batch < 1) {
-                    craftState = CraftState.CLEAR_GRID;
-                    craftTick  = 0;
-                    return;
-                }
-
+                if (batch < 1) { craftState = CraftState.CLEAR_GRID; craftTick = 0; return; }
                 if (batch >= stackCount) {
                     mc.interactionManager.clickSlot(syncId, srcSlot, 0, SlotActionType.PICKUP, mc.player);
                     mc.interactionManager.clickSlot(syncId, 1,       0, SlotActionType.PICKUP, mc.player);
                 } else {
                     mc.interactionManager.clickSlot(syncId, srcSlot, 0, SlotActionType.PICKUP, mc.player);
-                    for (int i = 0; i < batch; i++) {
+                    for (int i = 0; i < batch; i++)
                         mc.interactionManager.clickSlot(syncId, 1, 1, SlotActionType.PICKUP, mc.player);
-                    }
-                    if (!mc.player.playerScreenHandler.getCursorStack().isEmpty()) {
+                    if (!mc.player.playerScreenHandler.getCursorStack().isEmpty())
                         mc.interactionManager.clickSlot(syncId, srcSlot, 0, SlotActionType.PICKUP, mc.player);
-                    }
                 }
-
-                craftBatchSize  = batch;
-                craftMealBefore = countBoneMeal();
-                craftState      = CraftState.CRAFT_BATCH;
-                craftTick       = 0;
+                craftBatchSize = batch; craftMealBefore = countBoneMeal();
+                craftState = CraftState.CRAFT_BATCH; craftTick = 0;
             }
-
             case CRAFT_BATCH -> {
                 if (craftTick < craftingDelay.get()) return;
-
                 if (slotItem(1) != Items.BONE_BLOCK) {
-                    craftState       = CraftState.VERIFY_GAIN;
-                    craftVerifyTicks = 0;
-                    craftTick        = 0;
-                    return;
+                    craftState = CraftState.VERIFY_GAIN; craftVerifyTicks = 0; craftTick = 0; return;
                 }
-
                 if (slotItem(0) != Items.BONE_MEAL) {
                     if (++craftFailCount > 16) {
                         consecutiveCraftFails = Math.min(consecutiveCraftFails + 1, 4);
-                        craftFailCount = 0;
-                        craftState = CraftState.CLEAR_GRID;
-                        craftTick  = 0;
+                        craftFailCount = 0; craftState = CraftState.CLEAR_GRID; craftTick = 0;
                     }
                     return;
                 }
-
                 craftMealBefore = countBoneMeal();
-
                 mc.interactionManager.clickSlot(syncId, 0, 0, SlotActionType.QUICK_MOVE, mc.player);
-
-                craftState       = CraftState.VERIFY_GAIN;
-                craftVerifyTicks = 0;
-                craftTick        = 0;
+                craftState = CraftState.VERIFY_GAIN; craftVerifyTicks = 0; craftTick = 0;
             }
-
             case VERIFY_GAIN -> {
-                int now = countBoneMeal();
-                int gained = now - craftMealBefore;
+                int now = countBoneMeal(), gained = now - craftMealBefore;
                 int expected = craftBatchSize * BONE_MEAL_PER_BLOCK;
-
-                int verifyTimeout = Math.max(40,
-                        craftingDelay.get() * 5 + craftBatchSize * 2);
+                int verifyTimeout = Math.max(40, craftingDelay.get() * 5 + craftBatchSize * 2);
                 craftVerifyTicks++;
-
                 boolean gridEmpty = slotItem(1) != Items.BONE_BLOCK;
                 boolean fullBatch = expected > 0 && gained >= expected;
                 boolean partialOk = gridEmpty && gained >= BONE_MEAL_PER_BLOCK;
-
                 if (fullBatch || partialOk) {
-                    int craftsConfirmed = gained / BONE_MEAL_PER_BLOCK;
-                    craftBlocksNeeded   = Math.max(0, craftBlocksNeeded - craftsConfirmed);
-                    craftFailCount      = 0;
-                    consecutiveCraftFails = 0;
-                    craftBatchSize      = 0;
-                    craftMealBefore     = now;
-
+                    int confirmed = gained / BONE_MEAL_PER_BLOCK;
+                    craftBlocksNeeded = Math.max(0, craftBlocksNeeded - confirmed);
+                    craftFailCount = 0; consecutiveCraftFails = 0; craftBatchSize = 0; craftMealBefore = now;
                     craftState = (craftBlocksNeeded > 0 && countBoneBlocks() > 0)
-                            ? CraftState.MOVE_BATCH
-                            : CraftState.CLEAR_GRID;
-                    craftTick = 0;
-                    return;
+                            ? CraftState.MOVE_BATCH : CraftState.CLEAR_GRID;
+                    craftTick = 0; return;
                 }
-
                 if (craftVerifyTicks >= verifyTimeout) {
-                    if (gained >= BONE_MEAL_PER_BLOCK) {
-                        int craftsConfirmed = gained / BONE_MEAL_PER_BLOCK;
-                        craftBlocksNeeded   = Math.max(0, craftBlocksNeeded - craftsConfirmed);
-                    }
+                    if (gained >= BONE_MEAL_PER_BLOCK)
+                        craftBlocksNeeded = Math.max(0, craftBlocksNeeded - gained / BONE_MEAL_PER_BLOCK);
                     consecutiveCraftFails = Math.min(consecutiveCraftFails + 1, 4);
-                    craftFailCount = 0;
-                    craftBatchSize = 0;
-                    craftState     = CraftState.CLEAR_GRID;
-                    craftTick      = 0;
+                    craftFailCount = 0; craftBatchSize = 0; craftState = CraftState.CLEAR_GRID; craftTick = 0;
                 }
             }
-
             case CLEAR_GRID -> {
                 if (craftTick < craftingDelay.get()) return;
-
                 for (int s = 1; s <= 4; s++) {
                     if (!mc.player.playerScreenHandler.getSlot(s).getStack().isEmpty()) {
                         int dest = findEmptyInventoryScreenSlotExcluding(-1);
@@ -2029,11 +1748,9 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
                         } else {
                             mc.interactionManager.clickSlot(syncId, s, 0, SlotActionType.QUICK_MOVE, mc.player);
                         }
-                        craftTick = 0;
-                        return;
+                        craftTick = 0; return;
                     }
                 }
-
                 if (slotItem(0) == Items.BONE_MEAL) {
                     int dest = findEmptyInventoryScreenSlotExcluding(-1);
                     if (dest != -1) {
@@ -2042,72 +1759,43 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
                     } else {
                         mc.interactionManager.clickSlot(syncId, 0, 0, SlotActionType.QUICK_MOVE, mc.player);
                     }
-                    craftTick = 0;
-                    return;
+                    craftTick = 0; return;
                 }
-
                 if (!mc.player.playerScreenHandler.getCursorStack().isEmpty()) {
                     int dest = findEmptyInventoryScreenSlotExcluding(-1);
-                    if (dest != -1) {
-                        mc.interactionManager.clickSlot(syncId, dest, 0, SlotActionType.PICKUP, mc.player);
-                        craftTick = 0;
-                        return;
-                    }
+                    if (dest != -1) { mc.interactionManager.clickSlot(syncId, dest, 0, SlotActionType.PICKUP, mc.player); craftTick = 0; return; }
                 }
-
                 craftState = keepHotbarStocked.get() ? CraftState.STOCK_HOTBAR : CraftState.CLOSE;
-                craftTick  = 0;
+                craftTick = 0;
             }
-
             case STOCK_HOTBAR -> {
                 if (craftTick < craftingDelay.get()) return;
-
                 int targetHotbarHandler = HOTBAR_FIRST_HANDLER + 8;
-                net.minecraft.item.Item in9th =
-                        mc.player.playerScreenHandler.getSlot(targetHotbarHandler).getStack().getItem();
-
-                if (in9th == Items.BONE_MEAL) {
-                    craftState = CraftState.CLOSE;
-                    craftTick  = 0;
-                    return;
+                if (mc.player.playerScreenHandler.getSlot(targetHotbarHandler).getStack().getItem() == Items.BONE_MEAL) {
+                    craftState = CraftState.CLOSE; craftTick = 0; return;
                 }
-
                 int mealSrc = findBoneMealScreenSlot(targetHotbarHandler);
-                if (mealSrc == -1) {
-                    craftState = CraftState.CLOSE;
-                    craftTick  = 0;
-                    return;
-                }
-
-                mc.interactionManager.clickSlot(syncId, mealSrc, 8, SlotActionType.SWAP, mc.player);
-
-                craftState = CraftState.CLOSE;
-                craftTick  = 0;
+                if (mealSrc != -1)
+                    mc.interactionManager.clickSlot(syncId, mealSrc, 8, SlotActionType.SWAP, mc.player);
+                craftState = CraftState.CLOSE; craftTick = 0;
             }
-
             case CLOSE -> {
                 if (craftTick < craftingDelay.get()) return;
                 mc.player.closeHandledScreen();
-                craftState           = CraftState.IDLE;
-                lastCraftState       = CraftState.IDLE;
-                craftTick            = 0;
-                craftStuckTicks      = 0;
-                reservedLeftoverSlot = -1;
-                craftVerifyTicks     = 0;
-                screenOpenWaitTicks  = 0;
-                gotoRestartCooldown  = 20;
+                craftState = CraftState.IDLE; lastCraftState = CraftState.IDLE;
+                craftTick = 0; craftStuckTicks = 0; reservedLeftoverSlot = -1;
+                craftVerifyTicks = 0; screenOpenWaitTicks = 0;
+                gotoRestartCooldown = 20;
             }
-
             default -> craftState = CraftState.IDLE;
         }
     }
 
     private void emergencyCraftAbort(int syncId) {
         if (mc.player != null) {
-            for (int s = 0; s <= 4; s++) {
+            for (int s = 0; s <= 4; s++)
                 if (!mc.player.playerScreenHandler.getSlot(s).getStack().isEmpty())
                     mc.interactionManager.clickSlot(syncId, s, 0, SlotActionType.QUICK_MOVE, mc.player);
-            }
             if (!mc.player.playerScreenHandler.getCursorStack().isEmpty()) {
                 int dest = findEmptyInventoryScreenSlotExcluding(-1);
                 if (dest != -1)
@@ -2115,19 +1803,16 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
             }
             mc.player.closeHandledScreen();
         }
-        craftState           = CraftState.IDLE;
-        lastCraftState       = CraftState.IDLE;
-        craftTick            = 0;
-        craftStuckTicks      = 0;
-        craftBlocksNeeded    = 0;
-        craftBatchSize       = 0;
-        craftVerifyTicks     = 0;
-        screenOpenWaitTicks  = 0;
-        craftFailCount       = 0;
-        reservedLeftoverSlot = -1;
+        craftState = CraftState.IDLE; lastCraftState = CraftState.IDLE;
+        craftTick = 0; craftStuckTicks = 0; craftBlocksNeeded = 0; craftBatchSize = 0;
+        craftVerifyTicks = 0; screenOpenWaitTicks = 0; craftFailCount = 0; reservedLeftoverSlot = -1;
         consecutiveCraftFails = Math.min(consecutiveCraftFails + 1, 4);
-        gotoRestartCooldown  = 40;
+        gotoRestartCooldown = 40;
     }
+
+    // -----------------------------------------------------------------------
+    // Screen-slot helpers
+    // -----------------------------------------------------------------------
 
     private net.minecraft.item.Item slotItem(int slot) {
         return mc.player.playerScreenHandler.getSlot(slot).getStack().getItem();
@@ -2144,8 +1829,7 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
 
     private int findBoneMealScreenSlot(int excludeSlot) {
         if (mc.player == null) return -1;
-        int bestSlot = -1;
-        int bestCount = -1;
+        int bestSlot = -1, bestCount = -1;
         for (int s = INV_FIRST; s <= INV_LAST; s++) {
             if (s == excludeSlot) continue;
             var stack = mc.player.playerScreenHandler.getSlot(s).getStack();
@@ -2174,17 +1858,19 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         return n;
     }
 
+    // -----------------------------------------------------------------------
+    // Bonemeal target finding
+    // -----------------------------------------------------------------------
 
     private List<BlockPos> findTargets() {
         List<BlockPos> targets = new ArrayList<>();
         if (mc.player == null || mc.world == null) return targets;
 
-        double rangeSq    = range.get() * range.get();
+        double   rangeSq  = range.get() * range.get();
         BlockPos origin   = mc.player.getBlockPos();
-        int r             = (int) Math.ceil(range.get());
-
-        boolean trees = makeTrees.get();
-        boolean sideFaces = bonemealSideFaces.get();
+        int      r        = (int) Math.ceil(range.get());
+        boolean  trees    = makeTrees.get();
+        boolean  sideFaces = bonemealSideFaces.get();
 
         BlockPos.Mutable mp = new BlockPos.Mutable();
         for (int x = -r; x <= r; x++) {
@@ -2193,16 +1879,14 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
                     mp.set(origin.getX() + x, origin.getY() + y, origin.getZ() + z);
                     if (mp.getSquaredDistance(origin) > rangeSq) continue;
 
-                    BlockState state = mc.world.getBlockState(mp);
-                    Block block      = state.getBlock();
-
-                    boolean isMoss = block == mossBlockRef;
+                    BlockState state     = mc.world.getBlockState(mp);
+                    Block      block     = state.getBlock();
+                    boolean    isMoss   = block == mossBlockRef;
 
                     if (!isMoss && trees) {
-                        String blockName = block.getTranslationKey();
-                        boolean isAzalea = blockName.contains("azalea") && !blockName.contains("tree");
+                        String  blockName = block.getTranslationKey();
+                        boolean isAzalea  = blockName.contains("azalea") && !blockName.contains("tree");
                         boolean isSapling = blockName.contains("sapling");
-
                         if (isAzalea) {
                             BlockPos pos = mp.toImmutable();
                             if (!hasAnyVisibleFace(pos)) continue;
@@ -2227,11 +1911,8 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
                     if (!hasValidNeighbor(pos)) continue;
                     if (!hasSkyAccess(pos)) continue;
 
-                    if (sideFaces) {
-                        if (hasAnyVisibleFace(pos)) targets.add(pos);
-                    } else {
-                        if (!isObstructedAbove(pos) && hasLineOfSight(pos)) targets.add(pos);
-                    }
+                    if (sideFaces) { if (hasAnyVisibleFace(pos)) targets.add(pos); }
+                    else           { if (!isObstructedAbove(pos) && hasLineOfSight(pos)) targets.add(pos); }
                 }
             }
         }
@@ -2241,9 +1922,9 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
     private boolean hasValidNeighbor(BlockPos pos) {
         for (Direction dir : Direction.values()) {
             String n = mc.world.getBlockState(pos.offset(dir)).getBlock().getTranslationKey();
-            if (n.contains("azalea") || n.contains("tall_grass") ||
-                    (n.contains("grass") && !n.contains("block")) ||
-                    n.contains("moss_block") || n.contains("moss_carpet")) continue;
+            if (n.contains("azalea") || n.contains("tall_grass")
+                    || (n.contains("grass") && !n.contains("block"))
+                    || n.contains("moss_block") || n.contains("moss_carpet")) continue;
             return true;
         }
         return false;
@@ -2251,54 +1932,41 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
 
     private boolean isObstructedAbove(BlockPos pos) {
         BlockState above = mc.world.getBlockState(pos.up());
-
         if (!above.getFluidState().isEmpty()) return true;
-
         String n = above.getBlock().getTranslationKey();
-        return n.contains("torch")
-                || n.contains("lantern")
-                || n.contains("sign")
-                || n.contains("lava")
-                || n.contains("water");
+        return n.contains("torch") || n.contains("lantern") || n.contains("sign")
+                || n.contains("lava") || n.contains("water");
     }
 
     private boolean hasSkyAccess(BlockPos pos) {
         if (!requireSkyAccess.get()) return true;
-
         int depth = skyAccessDepth.get();
         for (int dy = 1; dy <= depth; dy++) {
-            BlockPos above = pos.up(dy);
-            BlockState state = mc.world.getBlockState(above);
-
+            BlockState state = mc.world.getBlockState(pos.up(dy));
             if (state.isAir()) continue;
             if (!state.getFluidState().isEmpty()) return false;
-
-            String n = state.getBlock().getTranslationKey();
-            boolean passable = n.contains("grass") || n.contains("fern")
-                    || n.contains("flower") || n.contains("azalea")
-                    || n.contains("moss_carpet") || n.contains("sapling")
-                    || n.contains("vine");
+            String  n        = state.getBlock().getTranslationKey();
+            boolean passable = n.contains("grass") || n.contains("fern") || n.contains("flower")
+                    || n.contains("azalea") || n.contains("moss_carpet")
+                    || n.contains("sapling") || n.contains("vine");
             if (passable) continue;
-
             return false;
         }
         return true;
     }
 
     private boolean hasLineOfSight(BlockPos pos) {
-        Vec3d eye   = mc.player.getEyePos();
-        Vec3d center = new Vec3d(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
-        RaycastContext ctx = new RaycastContext(eye, center,
+        Vec3d          eye    = mc.player.getEyePos();
+        Vec3d          center = new Vec3d(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
+        RaycastContext ctx    = new RaycastContext(eye, center,
                 RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player);
         return mc.world.raycast(ctx).getBlockPos().equals(pos);
     }
 
     private boolean hasAnyVisibleFace(BlockPos pos) {
         if (mc.player == null || mc.world == null) return false;
-        Vec3d eye = mc.player.getEyePos();
-        final double maxReach   = Math.min(range.get(), 4.4);
-        final double maxReachSq = maxReach * maxReach;
-
+        Vec3d        eye        = mc.player.getEyePos();
+        final double maxReachSq = Math.min(range.get(), 4.4) * Math.min(range.get(), 4.4);
         for (Direction dir : Direction.values()) {
             Vec3d hit = faceCenter(pos, dir);
             if (eye.squaredDistanceTo(hit) > maxReachSq) continue;
@@ -2307,6 +1975,9 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         return false;
     }
 
+    // -----------------------------------------------------------------------
+    // Face picking
+    // -----------------------------------------------------------------------
 
     private record FaceHit(Vec3d hit, Direction dir) {}
 
@@ -2317,74 +1988,54 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
                 pos.getZ() + 0.5 + dir.getOffsetZ() * 0.5);
     }
 
-    private FaceHit pickBonemealFace(BlockPos pos) {
-        return pickReachableFace(pos, bonemealSideFaces.get());
-    }
-
-    private FaceHit pickReachableFace(BlockPos pos) {
-        return pickReachableFace(pos, true);
-    }
+    private FaceHit pickBonemealFace(BlockPos pos) { return pickReachableFace(pos, bonemealSideFaces.get()); }
+    private FaceHit pickReachableFace(BlockPos pos) { return pickReachableFace(pos, true); }
 
     private FaceHit pickReachableFace(BlockPos pos, boolean allFaces) {
         if (mc.player == null || mc.world == null) return null;
-
-        Vec3d eye = mc.player.getEyePos();
-        final double maxReach   = Math.min(range.get(), 4.4);
-        final double maxReachSq = maxReach * maxReach;
-
-        Direction[] faces = allFaces
-                ? Direction.values()
-                : new Direction[]{ Direction.UP };
-
-        FaceHit best = null;
-        double  bestDistSq = Double.MAX_VALUE;
-
+        Vec3d        eye        = mc.player.getEyePos();
+        final double maxReachSq = Math.min(range.get(), 4.4) * Math.min(range.get(), 4.4);
+        Direction[]  faces      = allFaces ? Direction.values() : new Direction[]{ Direction.UP };
+        FaceHit      best       = null;
+        double       bestDistSq = Double.MAX_VALUE;
         for (Direction dir : faces) {
-            Vec3d hit = faceCenter(pos, dir);
-
+            Vec3d  hit    = faceCenter(pos, dir);
             double distSq = eye.squaredDistanceTo(hit);
             if (distSq > maxReachSq) continue;
-
             if (!faceVisible(pos, dir, hit, eye)) continue;
-
-            if (distSq < bestDistSq) {
-                bestDistSq = distSq;
-                best = new FaceHit(hit, dir);
-            }
+            if (distSq < bestDistSq) { bestDistSq = distSq; best = new FaceHit(hit, dir); }
         }
         return best;
     }
 
     private boolean faceVisible(BlockPos pos, Direction dir, Vec3d faceCenter, Vec3d eye) {
         if (mc.world == null) return false;
-
-        BlockPos neighbor = pos.offset(dir);
-        BlockState ns = mc.world.getBlockState(neighbor);
+        BlockPos   neighbor = pos.offset(dir);
+        BlockState ns       = mc.world.getBlockState(neighbor);
         if (!ns.isAir() && ns.getFluidState().isEmpty()) {
             net.minecraft.util.shape.VoxelShape shape = ns.getCollisionShape(mc.world, neighbor);
             if (!shape.isEmpty()) {
                 net.minecraft.util.math.Box bb = shape.getBoundingBox();
-                boolean fullCube = (bb.maxX - bb.minX) >= 0.999
-                        && (bb.maxY - bb.minY) >= 0.999
-                        && (bb.maxZ - bb.minZ) >= 0.999;
-                if (fullCube && ns.isOpaque()) return false;
+                if ((bb.maxX - bb.minX) >= 0.999 && (bb.maxY - bb.minY) >= 0.999
+                        && (bb.maxZ - bb.minZ) >= 0.999 && ns.isOpaque()) return false;
             }
         }
-
-        RaycastContext ctx = new RaycastContext(eye, faceCenter,
+        RaycastContext ctx    = new RaycastContext(eye, faceCenter,
                 RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player);
-        BlockPos hitPos = mc.world.raycast(ctx).getBlockPos();
+        BlockPos       hitPos = mc.world.raycast(ctx).getBlockPos();
         return hitPos.equals(pos) || hitPos.equals(neighbor);
     }
 
+    // -----------------------------------------------------------------------
+    // Rotation helpers
+    // -----------------------------------------------------------------------
 
     private double[] lookAt(Vec3d target) {
-        Vec3d eye = mc.player.getEyePos();
-        double dx = target.x - eye.x, dy = target.y - eye.y, dz = target.z - eye.z;
+        Vec3d  eye   = mc.player.getEyePos();
+        double dx    = target.x - eye.x, dy = target.y - eye.y, dz = target.z - eye.z;
         double horiz = Math.sqrt(dx * dx + dz * dz);
-        double yaw   = Math.toDegrees(Math.atan2(dz, dx)) - 90.0;
-        double pitch = -Math.toDegrees(Math.atan2(dy, horiz));
-        return new double[]{ yaw, pitch };
+        return new double[]{ Math.toDegrees(Math.atan2(dz, dx)) - 90.0,
+                -Math.toDegrees(Math.atan2(dy, horiz)) };
     }
 
     private void rotateOnce(double yaw, double pitch, int priority, Runnable action) {
@@ -2392,19 +2043,13 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
     }
 
     private void rotateOnce(double yaw, double pitch, int priority, boolean force, Runnable action) {
-        double dYaw   = wrapDegrees(yaw - lastRotYaw);
-        double dPitch = pitch - lastRotPitch;
+        double  dYaw      = wrapDegrees(yaw - lastRotYaw);
+        double  dPitch    = pitch - lastRotPitch;
         boolean unchanged = !Double.isNaN(lastRotYaw)
-                && Math.abs(dYaw) < ROT_EPSILON
-                && Math.abs(dPitch) < ROT_EPSILON;
-
+                && Math.abs(dYaw) < ROT_EPSILON && Math.abs(dPitch) < ROT_EPSILON;
         lastRotYaw   = yaw;
         lastRotPitch = pitch;
-
-        if (unchanged && !force) {
-            if (action != null) action.run();
-            return;
-        }
+        if (unchanged && !force) { if (action != null) action.run(); return; }
         Rotations.rotate(yaw, pitch, priority, action);
     }
 
@@ -2412,43 +2057,40 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         if (Double.isNaN(d)) return d;
         d %= 360.0;
         if (d <= -180.0) d += 360.0;
-        if (d > 180.0)   d -= 360.0;
+        if (d >   180.0) d -= 360.0;
         return d;
     }
 
     private boolean isMovingNow() {
         if (mc.player == null) return false;
         if (baritoneRunning) {
-            try {
-                if (BaritoneAPI.getProvider().getPrimaryBaritone()
-                        .getPathingBehavior().isPathing()) return true;
-            } catch (Throwable ignored) { }
+            try { if (BaritoneAPI.getProvider().getPrimaryBaritone().getPathingBehavior().isPathing()) return true; }
+            catch (Throwable ignored) {}
         }
         Vec3d v = mc.player.getVelocity();
         return (v.x * v.x + v.z * v.z) > 0.0025;
     }
 
+    // -----------------------------------------------------------------------
+    // Misc helpers
+    // -----------------------------------------------------------------------
 
     private void checkAndBreakStuckBlock() {
         if (mc.player == null || mc.world == null) return;
         BlockPos feet = mc.player.getBlockPos();
-        for (BlockPos check : new BlockPos[]{feet, feet.up()}) {
+        for (BlockPos check : new BlockPos[]{ feet, feet.up() }) {
             BlockState state = mc.world.getBlockState(check);
-            String name = state.getBlock().getTranslationKey();
-
+            String     name  = state.getBlock().getTranslationKey();
             boolean isAzaleaBush = name.equals("block.minecraft.azalea")
                     || name.equals("block.minecraft.flowering_azalea");
             boolean isMossCarpet = name.equals("block.minecraft.moss_carpet");
-
             if (!isAzaleaBush && !isMossCarpet) continue;
-
             if (isAzaleaBush) {
                 net.minecraft.util.math.Box box = new net.minecraft.util.math.Box(
                         check.getX(), check.getY(), check.getZ(),
                         check.getX() + 1, check.getY() + 1, check.getZ() + 1);
                 if (!mc.player.getBoundingBox().intersects(box)) continue;
             }
-
             mc.interactionManager.attackBlock(check, Direction.UP);
             mc.player.swingHand(Hand.MAIN_HAND);
             break;
@@ -2464,22 +2106,8 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
     }
 
     private void tickCooldowns() {
-        recentlyUsedMoss.entrySet().removeIf(e -> {
-            e.setValue(e.getValue() - 1);
-            return e.getValue() <= 0;
-        });
-        azaleaCooldownMap.entrySet().removeIf(e -> {
-            e.setValue(e.getValue() - 1);
-            return e.getValue() <= 0;
-        });
-    }
-
-    private int hotbarEmptySlots() {
-        if (mc.player == null) return 0;
-        int empty = 0;
-        for (int i = 0; i < 9; i++)
-            if (mc.player.getInventory().getStack(i).isEmpty()) empty++;
-        return empty;
+        recentlyUsedMoss.entrySet().removeIf(e -> { e.setValue(e.getValue() - 1); return e.getValue() <= 0; });
+        azaleaCooldownMap.entrySet().removeIf(e -> { e.setValue(e.getValue() - 1); return e.getValue() <= 0; });
     }
 
     private int inventoryEmptySlots() {
@@ -2501,19 +2129,15 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
 
     private int findBoneMealSlot() {
         if (mc.player == null) return -1;
-
         for (int i = 0; i < 9; i++)
             if (mc.player.getInventory().getStack(i).getItem() == Items.BONE_MEAL) return i;
-
         if (inventoryAllow.get()) {
             for (int inv = 9; inv < 36; inv++) {
                 if (mc.player.getInventory().getStack(inv).getItem() != Items.BONE_MEAL) continue;
                 for (int hot = 0; hot < 9; hot++) {
                     if (!mc.player.getInventory().getStack(hot).isEmpty()) continue;
-                    int handlerSlot = playerInvToHandlerSlot(inv);
-                    mc.interactionManager.clickSlot(
-                            mc.player.playerScreenHandler.syncId, handlerSlot, hot,
-                            SlotActionType.SWAP, mc.player);
+                    mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId,
+                            playerInvToHandlerSlot(inv), hot, SlotActionType.SWAP, mc.player);
                     return hot;
                 }
                 break;
@@ -2521,5 +2145,4 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         }
         return -1;
     }
-
 }
