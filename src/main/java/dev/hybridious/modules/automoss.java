@@ -493,6 +493,23 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
     private int                   targetCacheTTL   = 0;
     private static final int      TARGET_CACHE_TICKS = 40; // ~2 s at 20 tps
 
+    // findTargets() cache — prevents 100s of raycasts every single tick.
+    // Invalidated when player moves >1 block or TTL expires.
+    private List<BlockPos> cachedBoneMealTargets = new ArrayList<>();
+    private int            boneMealTargetCacheTTL = 0;
+    private BlockPos       lastTargetCacheOrigin  = null;
+    private static final int BONEMEAL_TARGET_CACHE_TICKS = 4; // ~5 rechecks/sec
+
+    // isMossInRange() cache — avoids a full cube scan every tick.
+    private boolean cachedMossInRange    = false;
+    private int     mossInRangeCacheTTL = 0;
+    private static final int MOSS_IN_RANGE_CACHE_TICKS = 6;
+
+    // KillAura entity scan throttle — only iterate world entities every N ticks.
+    private boolean cachedKillAuraResult = false;
+    private int     killAuraScanCooldown = 0;
+    private static final int KA_SCAN_INTERVAL = 3;
+
     // -----------------------------------------------------------------------
     // KillAura compat — tracks whether an external combat mod appears active
     // this tick so stall detection and rotation logic can back off gracefully.
@@ -596,6 +613,15 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         killAuraActiveThisTick = false;
         killAuraStallBuffer    = 0;
 
+        // Reset per-tick caches
+        cachedBoneMealTargets = new ArrayList<>();
+        boneMealTargetCacheTTL = 0;
+        lastTargetCacheOrigin  = null;
+        cachedMossInRange      = false;
+        mossInRangeCacheTTL    = 0;
+        cachedKillAuraResult   = false;
+        killAuraScanCooldown   = 0;
+
         enableHelper(LawnMower.class,        toggleLawnMower.get());
         enableHelper(InventoryCleaner.class, toggleInventoryCleaner.get());
         enableHelper(HotbarReplenish.class,  toggleHotbarReplenish.get());
@@ -645,6 +671,14 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
 
         killAuraActiveThisTick = false;
         killAuraStallBuffer    = 0;
+
+        cachedBoneMealTargets = new ArrayList<>();
+        boneMealTargetCacheTTL = 0;
+        lastTargetCacheOrigin  = null;
+        cachedMossInRange      = false;
+        mossInRangeCacheTTL    = 0;
+        cachedKillAuraResult   = false;
+        killAuraScanCooldown   = 0;
     }
 
     // -----------------------------------------------------------------------
@@ -923,8 +957,14 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
 
     private boolean isOutdoorSurface(BlockPos pos) {
         if (mc.world == null) return false;
+        // Fast path: use the engine's own sky-visibility check — O(1).
         if (mc.world.isSkyVisible(pos.up())) return true;
-        for (int dy = 1; dy <= 64; dy++) {
+        // Sky light level ≥ 12 strongly indicates outdoor (no solid roof within ~4 blocks).
+        // This avoids the 64-block loop for the vast majority of surface blocks.
+        if (mc.world.getLightLevel(net.minecraft.world.LightType.SKY, pos.up()) >= 12) return true;
+        // Slow path: only reached for blocks in partial shadow (under leaves, vines, etc.)
+        // Cap the scan at 16 instead of 64 — anything deeper is definitely indoors.
+        for (int dy = 1; dy <= 16; dy++) {
             BlockState st = mc.world.getBlockState(pos.up(dy));
             if (st.isAir()) continue;
             if (!st.getFluidState().isEmpty()) continue;
@@ -1023,29 +1063,43 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
         if (mc.player == null || mc.world == null) return false;
         if (!killAuraCompat.get()) return false;
 
-        // Primary signal: player is mid-swing at a living entity in range
+        // Primary signal: crosshair is on a living entity — zero-cost check, every tick.
         if (mc.player.handSwinging || mc.player.handSwingTicks > 0) {
-            // Check if there is any living entity the crosshair/attack could target
             net.minecraft.util.hit.HitResult hit = mc.crosshairTarget;
-            if (hit instanceof net.minecraft.util.hit.EntityHitResult ehr) {
-                if (ehr.getEntity() instanceof net.minecraft.entity.LivingEntity) return true;
+            if (hit instanceof net.minecraft.util.hit.EntityHitResult ehr
+                    && ehr.getEntity() instanceof net.minecraft.entity.LivingEntity) {
+                cachedKillAuraResult = true;
+                killAuraScanCooldown = KA_SCAN_INTERVAL;
+                return true;
             }
+        }
 
-            // Fallback: weapon held and swinging — very likely a KillAura swing
+        // Fallback entity scan — throttled to once every KA_SCAN_INTERVAL ticks to avoid
+        // iterating every loaded entity on every game tick (which was itself a lag source).
+        if (killAuraScanCooldown > 0) {
+            killAuraScanCooldown--;
+            return cachedKillAuraResult; // reuse last result between scan ticks
+        }
+        killAuraScanCooldown = KA_SCAN_INTERVAL;
+
+        if (mc.player.handSwinging || mc.player.handSwingTicks > 0) {
             net.minecraft.item.Item held = mc.player.getMainHandStack().getItem();
             boolean isMeleeWeapon = held instanceof net.minecraft.item.SwordItem
                     || held instanceof net.minecraft.item.AxeItem
                     || held instanceof net.minecraft.item.PickaxeItem;
             if (isMeleeWeapon) {
-                // Only flag if a living entity is within 6 blocks (expanded KillAura reach)
                 for (net.minecraft.entity.Entity e : mc.world.getEntities()) {
                     if (!(e instanceof net.minecraft.entity.LivingEntity)) continue;
                     if (e == mc.player) continue;
-                    if (mc.player.squaredDistanceTo(e) <= 36.0) return true; // 6 block radius
+                    if (mc.player.squaredDistanceTo(e) <= 36.0) {
+                        cachedKillAuraResult = true;
+                        return true;
+                    }
                 }
             }
         }
 
+        cachedKillAuraResult = false;
         return false;
     }
 
@@ -1222,7 +1276,7 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
 
         boolean moving = isMovingNow();
         int     uses   = 0;
-        for (BlockPos pos : findTargets()) {
+        for (BlockPos pos : getCachedTargets()) {
             if (uses >= maxUsesPerTick.get()) break;
 
             BlockState state  = mc.world.getBlockState(pos);
@@ -1599,6 +1653,10 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
 
     private boolean isMossInRange() {
         if (mc.player == null || mc.world == null) return false;
+        // Throttled — re-scan at most once every MOSS_IN_RANGE_CACHE_TICKS.
+        if (mossInRangeCacheTTL > 0) { mossInRangeCacheTTL--; return cachedMossInRange; }
+        mossInRangeCacheTTL = MOSS_IN_RANGE_CACHE_TICKS;
+
         double   rangeSq = range.get() * range.get();
         BlockPos origin  = mc.player.getBlockPos();
         int      r       = (int) Math.ceil(range.get());
@@ -1608,8 +1666,12 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
                 for (int z = -r; z <= r; z++) {
                     p.set(origin.getX() + x, origin.getY() + y, origin.getZ() + z);
                     if (p.getSquaredDistance(origin) > rangeSq) continue;
-                    if (mc.world.getBlockState(p).getBlock() == mossBlockRef) return true;
+                    if (mc.world.getBlockState(p).getBlock() == mossBlockRef) {
+                        cachedMossInRange = true;
+                        return true;
+                    }
                 }
+        cachedMossInRange = false;
         return false;
     }
 
@@ -1702,6 +1764,9 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
             restoreHotbarSynced(prev);
         });
         placeMossTimer = placeMossDelay.get();
+        // Moss was placed — nearby block state changed, invalidate both caches.
+        boneMealTargetCacheTTL = 0;
+        mossInRangeCacheTTL    = 0;
     }
 
     private int findMossBlockSlot() {
@@ -1957,6 +2022,31 @@ public class automoss extends Module {private final SettingGroup sgGeneral = set
     // -----------------------------------------------------------------------
     // Bonemeal target finding
     // -----------------------------------------------------------------------
+
+    /**
+     * Returns bonemeal targets for this tick, using a short-lived cache so that
+     * the expensive per-block raycasts in hasAnyVisibleFace()/faceVisible() only
+     * run at most once every BONEMEAL_TARGET_CACHE_TICKS ticks, OR when the
+     * player moves more than 1 block (whichever comes first).
+     * Previous code ran all raycasts every single tick, causing visible frame drops.
+     */
+    private List<BlockPos> getCachedTargets() {
+        if (mc.player == null) return cachedBoneMealTargets;
+
+        BlockPos origin = mc.player.getBlockPos();
+        boolean  moved  = lastTargetCacheOrigin == null
+                || lastTargetCacheOrigin.getManhattanDistance(origin) > 1;
+
+        if (!moved && boneMealTargetCacheTTL > 0) {
+            boneMealTargetCacheTTL--;
+            return cachedBoneMealTargets;
+        }
+
+        cachedBoneMealTargets = findTargets();
+        boneMealTargetCacheTTL = BONEMEAL_TARGET_CACHE_TICKS;
+        lastTargetCacheOrigin  = origin;
+        return cachedBoneMealTargets;
+    }
 
     private List<BlockPos> findTargets() {
         List<BlockPos> targets = new ArrayList<>();
