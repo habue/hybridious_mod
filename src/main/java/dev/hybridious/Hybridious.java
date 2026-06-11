@@ -32,6 +32,7 @@ public class Hybridious extends MeteorAddon {
         Modules.get().add(new HotbarReplenish());
         Modules.get().add(new InventoryCleaner());
         Modules.get().add(new ShulkerRestock());
+        Modules.get().add(new handmoss());
         // Commands
         //Commands.add(new MapFilterCommand());
         Commands.add(new BannerBlacklist());
