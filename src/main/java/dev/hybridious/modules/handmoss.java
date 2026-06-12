@@ -186,11 +186,14 @@ public class handmoss extends Module {
         if (mc.player == null || mc.world == null) return;
 
         updateMossCooldowns();
+
         int boneMealSlot = findBoneMealSlot();
         if (boneMealSlot == -1) return;
 
-        int uses = 0;
         List<BlockPos> targets = findTargets();
+        if (targets.isEmpty()) return;
+
+        int uses = 0;
 
         for (BlockPos blockPos : targets) {
             if (uses >= maxUsesPerTick.get()) break;
@@ -199,30 +202,20 @@ public class handmoss extends Module {
             Block block = state.getBlock();
             boolean isMoss = block.getTranslationKey().contains("moss_block");
 
-            // Skip moss blocks on cooldown
-            if (isMoss && recentlyUsedMoss.containsKey(blockPos)) {
-                continue;
+            if (isMoss && recentlyUsedMoss.containsKey(blockPos)) continue;
+
+            Vec3d hitPos = new Vec3d(blockPos.getX() + 0.5, blockPos.getY() + 0.5, blockPos.getZ() + 0.5);
+            BlockHitResult hit = new BlockHitResult(hitPos, Direction.UP, blockPos, false);
+
+            mc.player.getInventory().selectedSlot = boneMealSlot;
+            mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, hit);
+
+            if (isMoss) {
+                recentlyUsedMoss.put(new BlockPos(blockPos), mossSpreadCooldown.get());
             }
 
-            if (BoneMealItem.useOnFertilizable(mc.player.getInventory().getStack(boneMealSlot), mc.world, blockPos)) {
-                Vec3d hitPos = new Vec3d(blockPos.getX() + 0.5, blockPos.getY() + 0.5, blockPos.getZ() + 0.5);
-                BlockHitResult hit = new BlockHitResult(hitPos, Direction.UP, blockPos, false);
-
-                int prevSelectedSlot = mc.player.getInventory().selectedSlot;
-                mc.player.getInventory().selectedSlot = boneMealSlot;
-
-                mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, hit);
-
-                mc.player.getInventory().selectedSlot = prevSelectedSlot;
-
-                // Add moss blocks to cooldown map
-                if (isMoss) {
-                    recentlyUsedMoss.put(new BlockPos(blockPos), mossSpreadCooldown.get());
-                }
-
-                uses++;
-                delayTimer = delay.get();
-            }
+            uses++;
+            delayTimer = delay.get();
         }
     }
 
