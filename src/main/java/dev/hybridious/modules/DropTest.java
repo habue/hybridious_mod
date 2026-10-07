@@ -5,10 +5,9 @@ import meteordevelopment.meteorclient.MeteorClient;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
-import meteordevelopment.orbit.EventInteractionHandler;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.core.registries.BuiltInBuiltInRegistries;
+import net.minecraft.core.registries.BuiltInRegistries;
 
 import java.io.BufferedWriter;
 import java.io.File;
