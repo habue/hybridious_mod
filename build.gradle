@@ -8,9 +8,6 @@ base {
     group = project.maven_group
 }
 
-loom {
-    accessWidenerPath = file("src/main/resources/hybridious.accesswidener")
-}
 
 repositories {
     mavenCentral()
