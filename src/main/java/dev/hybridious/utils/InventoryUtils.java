@@ -1,18 +1,18 @@
 package dev.hybridious.utils;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.screen.ingame.InventoryScreen;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.network.packet.c2s.play.PlayerActionC2SPacket;
-import net.minecraft.screen.PlayerScreenHandler;
-import net.minecraft.screen.slot.Slot;
-import net.minecraft.screen.slot.SlotActionType;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
+import net.minecraft.world.inventory.InventoryMenu;
+import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.inventory.ClickType;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 
 public class InventoryUtils {
-    private static final MinecraftClient mc = MinecraftClient.getInstance();
+    private static final Minecraft mc = Minecraft.getInstance();
 
     public static int countItemsInInventory(Item item) {
         int count = 0;
@@ -47,20 +47,20 @@ public class InventoryUtils {
     public static void moveStackBetweenSlots(int pickupSlot, int dumpSlot) {
         if (!(mc.currentScreen instanceof InventoryScreen)) return;
 
-        PlayerScreenHandler handler = mc.player.playerScreenHandler;
+        InventoryMenu handler = mc.player.playerScreenInteractionHandler;
 
-        mc.interactionManager.clickSlot(handler.syncId, pickupSlot, 0, SlotActionType.PICKUP, mc.player);
-        mc.interactionManager.clickSlot(handler.syncId, dumpSlot,   0, SlotActionType.PICKUP, mc.player);
+        mc.interactionManager.clickSlot(handler.syncId, pickupSlot, 0, ClickType.PICKUP, mc.player);
+        mc.interactionManager.clickSlot(handler.syncId, dumpSlot,   0, ClickType.PICKUP, mc.player);
     }
 
     public static void quickMove(Slot slot) {
-        mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, slot.getIndex(), 0, SlotActionType.QUICK_MOVE, mc.player);
+        mc.interactionManager.clickSlot(mc.player.currentScreenInteractionHandler.syncId, slot.getIndex(), 0, ClickType.QUICK_MOVE, mc.player);
     }
 
     public static void sendStartBreakBlockPacket(BlockPos pos) {
         if (mc.interactionManager == null || mc.world == null) return;
         mc.interactionManager.sendSequencedPacket(mc.world, (sequence) ->
-                new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.START_DESTROY_BLOCK, pos, Direction.UP, sequence)
+                new ServerboundPlayerActionPacket(ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, pos, Direction.UP, sequence)
         );
     }
 }
