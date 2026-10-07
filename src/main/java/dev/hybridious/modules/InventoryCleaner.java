@@ -12,10 +12,10 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.systems.modules.Categories; 
 import meteordevelopment.orbit.EventHandler;
 
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.screen.slot.SlotActionType;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.inventory.ContainerInput;
 
 import java.util.List;
 
@@ -138,7 +138,7 @@ public class InventoryCleaner extends Module {
                 mc.player.playerScreenHandler.syncId, // syncId of the player's inventory container
                 handlerSlot,
                 1,                                    // 1 = drop whole stack
-                SlotActionType.THROW,
+                ContainerInput.THROW,
                 mc.player
         );
     }
