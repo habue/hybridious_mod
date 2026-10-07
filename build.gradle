@@ -1,5 +1,5 @@
 plugins {
-    id "fabric-loom" version "1.11-SNAPSHOT"
+    id "fabric-loom" version "1.17-SNAPSHOT"
 }
 
 base {
@@ -26,7 +26,6 @@ repositories {
 
 dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    mappings loom.officialMojangMappings()
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 
     modImplementation "meteordevelopment:meteor-client:${project.minecraft_version}-SNAPSHOT"
