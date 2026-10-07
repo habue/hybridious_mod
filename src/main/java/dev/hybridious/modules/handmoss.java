@@ -9,18 +9,18 @@ import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.systems.modules.Modules;
-import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.item.BoneMealItem;
-import net.minecraft.item.Items;
-import net.minecraft.screen.slot.SlotActionType;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.RaycastContext;
+import meteordevelopment.orbit.EventInteractionHandler;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.item.BoneMealItem;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.InteractionInteractionHand;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.ClipContext;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -143,7 +143,7 @@ public class handmoss extends Module {
     private final Map<BlockPos, Integer> azaleaCooldownMap = new HashMap<>();
 
     public handmoss() {
-        super(Hybridious.CATEGORY, "HandMoss", "Automatically uses bone meal on specific blocks.");
+        super(Hybridious.CATEGORY, "InteractionHandMoss", "Automatically uses bone meal on specific blocks.");
     }
 
     private void enableHelper(Class<? extends Module> type) {
@@ -176,7 +176,7 @@ public class handmoss extends Module {
         azaleaCooldownMap.clear();
     }
 
-    @EventHandler
+    @EventInteractionHandler
     private void onTick(TickEvent.Pre event) {
         if (delayTimer > 0) {
             delayTimer--;
@@ -204,11 +204,11 @@ public class handmoss extends Module {
 
             if (isMoss && recentlyUsedMoss.containsKey(blockPos)) continue;
 
-            Vec3d hitPos = new Vec3d(blockPos.getX() + 0.5, blockPos.getY() + 0.5, blockPos.getZ() + 0.5);
+            Vec3 hitPos = new Vec3(blockPos.getX() + 0.5, blockPos.getY() + 0.5, blockPos.getZ() + 0.5);
             BlockHitResult hit = new BlockHitResult(hitPos, Direction.UP, blockPos, false);
 
             mc.player.getInventory().selectedSlot = boneMealSlot;
-            mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, hit);
+            mc.interactionManager.interactBlock(mc.player, InteractionHand.MAIN_HAND, hit);
 
             if (isMoss) {
                 recentlyUsedMoss.put(new BlockPos(blockPos), mossSpreadCooldown.get());
@@ -307,14 +307,14 @@ public class handmoss extends Module {
     private boolean hasLineOfSight(BlockPos pos) {
         if (mc.player == null || mc.world == null) return false;
 
-        Vec3d eyePos = mc.player.getEyePos();
-        Vec3d blockPos = new Vec3d(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
+        Vec3 eyePos = mc.player.getEyePos();
+        Vec3 blockPos = new Vec3(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
 
-        RaycastContext context = new RaycastContext(
+        ClipContext context = new ClipContext(
                 eyePos,
                 blockPos,
-                RaycastContext.ShapeType.COLLIDER,
-                RaycastContext.FluidHandling.NONE,
+                ClipContext.ShapeType.COLLIDER,
+                ClipContext.FluidInteractionHandling.NONE,
                 mc.player
         );
 
@@ -343,7 +343,7 @@ public class handmoss extends Module {
                     }
 
                     if (emptySlot != -1) {
-                        mc.interactionManager.clickSlot(0, i, emptySlot, SlotActionType.SWAP, mc.player);
+                        mc.interactionManager.clickSlot(0, i, emptySlot, ClickType.SWAP, mc.player);
                         return emptySlot;
                     }
                     break;
