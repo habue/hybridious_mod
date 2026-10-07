@@ -9,14 +9,14 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.entity.BannerBlockEntity;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.client.sound.PositionedSoundInstance;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.component.type.BannerPatternsComponent;
-import net.minecraft.sound.SoundEvents;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
+import net.minecraft.world.level.block.entity.BannerBlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.item.component.BannerPatternLayers;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.AABB;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
@@ -182,7 +182,7 @@ public class BannerFinder extends Module {
                     foundBanners.add(pos);
 
                     if (soundAlert.get() && !notifiedBanners.contains(pos) && soundCooldownTicks == 0) {
-                        mc.getSoundManager().play(PositionedSoundInstance.master(
+                        mc.getSoundManager().play(SimpleSoundInstance.master(
                                 SoundEvents.BLOCK_NOTE_BLOCK_PLING.value(), 1.0f, 1.0f
                         ));
                         notifiedBanners.add(pos);
@@ -232,7 +232,7 @@ public class BannerFinder extends Module {
             }
 
             if (box.get()) {
-                Box box = new Box(x, y, z, x + 1, y + 1, z + 1);
+                AABB box = new AABB(x, y, z, x + 1, y + 1, z + 1);
                 event.renderer.box(box, sideColor.get(), lineColor.get(), shapeMode.get(), 0);
             }
         }
@@ -296,9 +296,9 @@ public class BannerFinder extends Module {
         return hash != null && blacklistedPatterns.contains(hash);
     }
 
-    private String getBannerHash(net.minecraft.item.ItemStack stack) {
+    private String getBannerHash(net.minecraft.world.item.ItemStack stack) {
         try {
-            BannerPatternsComponent patterns = stack.get(DataComponentTypes.BANNER_PATTERNS);
+            BannerPatternLayers patterns = stack.get(DataComponents.BANNER_PATTERNS);
             if (patterns == null) return "EMPTY";
 
             StringBuilder hash = new StringBuilder();
@@ -314,7 +314,7 @@ public class BannerFinder extends Module {
 
     private String getBannerHash(BannerBlockEntity entity) {
         try {
-            BannerPatternsComponent patterns = entity.getPatterns();
+            BannerPatternLayers patterns = entity.getPatterns();
             if (patterns == null) return "EMPTY";
 
             StringBuilder hash = new StringBuilder();
