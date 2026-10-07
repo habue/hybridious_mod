@@ -24,8 +24,8 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
 import meteordevelopment.meteorclient.systems.modules.render.FreeLook;
-import net.minecraft.core.registries.BuiltInBuiltInRegistries;
-import net.minecraft.world.inventory.ClickType;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.core.BlockPos;
@@ -438,13 +438,13 @@ public class automoss extends Module {
                 ItemStack grid = mc.player.playerScreenHandler.getSlot(CRAFT_GRID_SLOT).getStack();
                 if (!grid.isEmpty())
                     mc.interactionManager.clickSlot(useSyncId, CRAFT_GRID_SLOT, 0,
-                            ClickType.QUICK_MOVE, mc.player);
+                            ContainerInput.QUICK_MOVE, mc.player);
             } catch (Throwable ignored) {}
             // Drop cursor
             try {
                 if (!mc.player.playerScreenHandler.getCursorStack().isEmpty())
                     mc.interactionManager.clickSlot(useSyncId, CRAFT_GRID_SLOT, 0,
-                            ClickType.PICKUP, mc.player);
+                            ContainerInput.PICKUP, mc.player);
             } catch (Throwable ignored) {}
             // Close
             try { mc.player.closeHandledScreen(); } catch (Throwable ignored) {}
@@ -752,7 +752,7 @@ public class automoss extends Module {
         BlockPos origin = mc.player.getBlockPos();
         int r = scanRadius.get(), stride = Math.max(1, rowSpacing.get());
         Map<Long, CoverageCell> cells = new LinkedHashMap<>();
-        BlockPos.Mutable mp = new BlockPos.Mutable();
+        BlockPos.MutableBlockPos mp = new BlockPos.MutableBlockPos();
         int minY = origin.getY() - maxDescend.get() - 1;
         for (int dx = -r; dx <= r; dx++) {
             for (int dz = -r; dz <= r; dz++) {
@@ -846,7 +846,7 @@ public class automoss extends Module {
         int waterColumns = 0, consecutiveWater = 0;
         int steps = Math.max(Math.abs(to.getX() - from.getX()), Math.abs(to.getZ() - from.getZ()));
         if (steps <= 1) return false;
-        BlockPos.Mutable check = new BlockPos.Mutable();
+        BlockPos.MutableBlockPos check = new BlockPos.MutableBlockPos();
         for (int i = 1; i < steps; i++) {
             double t = i / (double) steps;
             int x = (int) Math.round(from.getX() + (to.getX() - from.getX()) * t);
@@ -872,7 +872,7 @@ public class automoss extends Module {
     private void planBoustrophedonFallbackWithoutDryFilter(Map<Long, CoverageCell> cells, BlockPos origin) {
         cells.clear();
         int r = scanRadius.get(), minY = origin.getY() - maxDescend.get() - 1;
-        BlockPos.Mutable mp = new BlockPos.Mutable();
+        BlockPos.MutableBlockPos mp = new BlockPos.MutableBlockPos();
         for (int dx = -r; dx <= r; dx++) {
             for (int dz = -r; dz <= r; dz++) {
                 int wx = origin.getX() + dx, wz = origin.getZ() + dz;
@@ -934,7 +934,7 @@ public class automoss extends Module {
 
     private Integer findDryWalkableSurfaceY(int x, int z, int originY) {
         if (mc.world == null) return null;
-        BlockPos.Mutable p = new BlockPos.Mutable();
+        BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
         for (int dy = 3; dy >= -maxDescend.get() - 2; dy--) {
             p.set(x, originY + dy, z);
             if (isDryWalkableFloor(p, mc.world.getBlockState(p))) return p.getY();
@@ -1015,7 +1015,7 @@ public class automoss extends Module {
     private boolean isClusterBorderMostlyWaterOrIce(List<CoverageCell> cluster, Map<Long, CoverageCell> cells) {
         if (mc.world == null || cluster == null || cluster.isEmpty()) return false;
         int borderChecks = 0, waterIceChecks = 0;
-        BlockPos.Mutable check = new BlockPos.Mutable();
+        BlockPos.MutableBlockPos check = new BlockPos.MutableBlockPos();
         for (CoverageCell cell : cluster) {
             for (Direction dir : new Direction[]{Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST}) {
                 int nx = cell.x() + dir.getOffsetX(), nz = cell.z() + dir.getOffsetZ();
@@ -1028,7 +1028,7 @@ public class automoss extends Module {
         return waterIceChecks * 100 >= borderChecks * waterIceBorderPercent.get();
     }
 
-    private boolean hasWaterOrIceNearColumn(int x, int y, int z, BlockPos.Mutable check) {
+    private boolean hasWaterOrIceNearColumn(int x, int y, int z, BlockPos.MutableBlockPos check) {
         if (mc.world == null) return false;
         for (int dy = -1; dy <= 1; dy++) {
             check.set(x, y + dy, z);
@@ -1141,7 +1141,7 @@ public class automoss extends Module {
         double rangeSq = range.get() * range.get();
         BlockPos origin = mc.player.getBlockPos();
         int r = (int) Math.ceil(range.get());
-        BlockPos.Mutable mp = new BlockPos.Mutable();
+        BlockPos.MutableBlockPos mp = new BlockPos.MutableBlockPos();
         for (int x = -r; x <= r; x++) {
             for (int y = -r; y <= r; y++) {
                 for (int z = -r; z <= r; z++) {
@@ -1329,7 +1329,7 @@ public class automoss extends Module {
         mossInRangeCacheTTL = MOSS_RANGE_TTL;
         double rSq = range.get() * range.get(); BlockPos origin = mc.player.getBlockPos();
         int r = (int) Math.ceil(range.get());
-        BlockPos.Mutable p = new BlockPos.Mutable();
+        BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
         for (int x = -r; x <= r; x++) for (int y = -r; y <= r; y++) for (int z = -r; z <= r; z++) {
             p.set(origin.getX() + x, origin.getY() + y, origin.getZ() + z);
             if (p.getSquaredDistance(origin) > rSq) continue;
@@ -1407,7 +1407,7 @@ public class automoss extends Module {
         double maxReach = Math.min(range.get(), 4.35), maxReachSq = maxReach * maxReach;
         SeedPlace best = null; double bestScore = Double.MAX_VALUE;
         int horizontal = Math.max(3, Math.min(5, (int) Math.ceil(range.get())));
-        BlockPos.Mutable support = new BlockPos.Mutable();
+        BlockPos.MutableBlockPos support = new BlockPos.MutableBlockPos();
         for (int y = 1; y >= -3; y--) {
             for (int x = -horizontal; x <= horizontal; x++) {
                 for (int z = -horizontal; z <= horizontal; z++) {
@@ -1435,7 +1435,7 @@ public class automoss extends Module {
     private int scoreNearbyMossableSeedArea(BlockPos center) {
         if (mc.world == null || center == null) return 0;
         int radius = Math.max(2, seedAreaScanRadius.get()), score = 0;
-        BlockPos.Mutable p = new BlockPos.Mutable();
+        BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
         for (int dx = -radius; dx <= radius; dx++) {
             for (int dz = -radius; dz <= radius; dz++) {
                 int distanceSq = dx * dx + dz * dz;
@@ -1538,7 +1538,7 @@ public class automoss extends Module {
     private boolean isLocalWaterIceIsland(BlockPos center) {
         if (mc.world == null || center == null) return false;
         int connectedMossable = 0, borderChecks = 0, waterIceChecks = 0, radius = 2;
-        BlockPos.Mutable p = new BlockPos.Mutable();
+        BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
         for (int dx = -radius; dx <= radius; dx++) {
             for (int dz = -radius; dz <= radius; dz++) {
                 p.set(center.getX() + dx, center.getY(), center.getZ() + dz);
@@ -1706,14 +1706,14 @@ public class automoss extends Module {
 
                     if (!mc.player.playerScreenHandler.getCursorStack().isEmpty()) {
                         mc.interactionManager.clickSlot(sid, ssrc, 0,
-                                ClickType.PICKUP, mc.player);
+                                ContainerInput.PICKUP, mc.player);
                     }
 
                     mc.interactionManager.clickSlot(sid, ssrc, 1,
-                            ClickType.PICKUP, mc.player);
+                            ContainerInput.PICKUP, mc.player);
 
                     mc.interactionManager.clickSlot(sid, CRAFT_GRID_SLOT, 0,
-                            ClickType.PICKUP, mc.player);
+                            ContainerInput.PICKUP, mc.player);
                 });
 
                 craftState        = CraftState.COLLECT;
@@ -1731,17 +1731,17 @@ public class automoss extends Module {
                     ItemStack output = mc.player.playerScreenHandler.getSlot(CRAFT_OUTPUT_SLOT).getStack();
                     if (!output.isEmpty()) {
                         mc.interactionManager.clickSlot(sid, CRAFT_OUTPUT_SLOT, 0,
-                                ClickType.QUICK_MOVE, mc.player);
+                                ContainerInput.QUICK_MOVE, mc.player);
                     }
                     ItemStack grid = mc.player.playerScreenHandler.getSlot(CRAFT_GRID_SLOT).getStack();
                     if (!grid.isEmpty()) {
                         mc.interactionManager.clickSlot(sid, CRAFT_GRID_SLOT, 0,
-                                ClickType.QUICK_MOVE, mc.player);
+                                ContainerInput.QUICK_MOVE, mc.player);
                     }
                     if (!mc.player.playerScreenHandler.getCursorStack().isEmpty()) {
                         int dropBack = (craftSrcSlot >= 0) ? craftSrcSlot : INV_FIRST;
                         mc.interactionManager.clickSlot(sid, dropBack, 0,
-                                ClickType.PICKUP, mc.player);
+                                ContainerInput.PICKUP, mc.player);
                     }
                 });
 
@@ -1780,7 +1780,7 @@ public class automoss extends Module {
                     if (bestSrc == -1) return;
                     int hotbarButton = targetSlot - HOTBAR_FIRST_HANDLER;
                     mc.interactionManager.clickSlot(sid, bestSrc, hotbarButton,
-                            ClickType.SWAP, mc.player);
+                            ContainerInput.SWAP, mc.player);
                 });
 
                 craftState        = CraftState.CLOSE;
@@ -1798,14 +1798,14 @@ public class automoss extends Module {
                     ItemStack out = mc.player.playerScreenHandler.getSlot(CRAFT_OUTPUT_SLOT).getStack();
                     if (!out.isEmpty())
                         mc.interactionManager.clickSlot(sid, CRAFT_OUTPUT_SLOT, 0,
-                                ClickType.QUICK_MOVE, mc.player);
+                                ContainerInput.QUICK_MOVE, mc.player);
                     ItemStack grid = mc.player.playerScreenHandler.getSlot(CRAFT_GRID_SLOT).getStack();
                     if (!grid.isEmpty())
                         mc.interactionManager.clickSlot(sid, CRAFT_GRID_SLOT, 0,
-                                ClickType.QUICK_MOVE, mc.player);
+                                ContainerInput.QUICK_MOVE, mc.player);
                     if (!mc.player.playerScreenHandler.getCursorStack().isEmpty()) {
                         mc.interactionManager.clickSlot(sid, INV_FIRST, 0,
-                                ClickType.PICKUP, mc.player);
+                                ContainerInput.PICKUP, mc.player);
                     }
                     mc.player.closeHandledScreen();
                 });
@@ -2074,7 +2074,7 @@ public class automoss extends Module {
                     if (!mc.player.getInventory().getStack(hot).isEmpty()) continue;
                     if (!tryConsumePacket(1)) break;
                     mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId,
-                            playerInvToHandlerSlot(inv), hot, ClickType.SWAP, mc.player);
+                            playerInvToHandlerSlot(inv), hot, ContainerInput.SWAP, mc.player);
                     return hot;
                 }
                 break;
@@ -2213,7 +2213,7 @@ public class automoss extends Module {
                     if (!mc.player.getInventory().getStack(hot).isEmpty()) continue;
                     if (!tryConsumePacket(1)) break;
                     mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId,
-                            playerInvToHandlerSlot(inv), hot, ClickType.SWAP, mc.player);
+                            playerInvToHandlerSlot(inv), hot, ContainerInput.SWAP, mc.player);
                     return hot;
                 }
                 break;
@@ -2233,7 +2233,7 @@ public class automoss extends Module {
                     if (!mc.player.getInventory().getStack(hot).isEmpty()) continue;
                     if (!tryConsumePacket(1)) break;
                     mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId,
-                            playerInvToHandlerSlot(inv), hot, ClickType.SWAP, mc.player);
+                            playerInvToHandlerSlot(inv), hot, ContainerInput.SWAP, mc.player);
                     return hot;
                 }
                 break;
