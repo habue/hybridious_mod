@@ -13,7 +13,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.item.BoneMealItem;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.core.BlockPos;
@@ -342,7 +342,7 @@ public class handmoss extends Module {
                     }
 
                     if (emptySlot != -1) {
-                        mc.interactionManager.clickSlot(0, i, emptySlot, ClickType.SWAP, mc.player);
+                        mc.interactionManager.clickSlot(0, i, emptySlot, ContainerInput.SWAP, mc.player);
                         return emptySlot;
                     }
                     break;
