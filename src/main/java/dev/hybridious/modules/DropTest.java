@@ -5,10 +5,10 @@ import meteordevelopment.meteorclient.MeteorClient;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
-import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.ItemEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.registry.Registries;
+import meteordevelopment.orbit.EventInteractionHandler;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.core.registries.BuiltInBuiltInRegistries;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -163,7 +163,7 @@ public class DropTest extends Module {
         saveTestResults();
     }
 
-    @EventHandler
+    @EventInteractionHandler
     private void onTick(TickEvent.Post event) {
         if (!testActive) return;
 
@@ -207,7 +207,7 @@ public class DropTest extends Module {
 
             List<ItemEntity> entities = mc.world.getEntitiesByClass(
                     ItemEntity.class,
-                    mc.player.getBoundingBox().expand(renderDistance),
+                    mc.player.getBoundingAABB().expand(renderDistance),
                     entity -> entity != null && !entity.isRemoved()
             );
 
@@ -226,7 +226,7 @@ public class DropTest extends Module {
                     ItemStack stack = itemEntity.getStack();
                     if (stack == null || stack.isEmpty()) continue;
 
-                    String itemId = Registries.ITEM.getId(stack.getItem()).toString();
+                    String itemId = BuiltInRegistries.ITEM.getId(stack.getItem()).toString();
                     if (itemId == null) continue;
 
                     // Check if we should track this item
@@ -569,13 +569,13 @@ public class DropTest extends Module {
                         writer.write("STORAGE CAPACITY:\n");
                         writer.write("-----------------------------------------------------------------\n");
                         writer.write("  Stack Size: " + stackSize + " items per stack\n");
-                        writer.write("  Items Per Shulker Box: " + itemsPerShulker + " items (27 slots)\n");
+                        writer.write("  Items Per Shulker AABB: " + itemsPerShulker + " items (27 slots)\n");
                         writer.write("  Items Per Double Chest (Dub): " + itemsPerDoubleChest + " items (54 shulkers)\n");
                         writer.write("\n");
 
                         writer.write("TIME TO FILL:\n");
                         writer.write("-----------------------------------------------------------------\n");
-                        writer.write("  One Shulker Box:\n");
+                        writer.write("  One Shulker AABB:\n");
                         writer.write("    " + df2.format(minutesPerShulker) + " minutes\n");
                         writer.write("    " + df2.format(hoursPerShulker) + " hours\n");
                         writer.write("\n");
