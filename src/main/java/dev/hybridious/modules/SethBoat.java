@@ -7,15 +7,15 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Categories;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.Rotations;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.vehicle.BoatEntity;
-import net.minecraft.entity.vehicle.MinecartEntity;
-import net.minecraft.entity.passive.HorseEntity;
-import net.minecraft.entity.passive.LlamaEntity;
-import net.minecraft.entity.passive.PigEntity;
-import net.minecraft.entity.passive.StriderEntity;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.vehicle.AbstractBoat;
+import net.minecraft.world.entity.vehicle.Minecart;
+import net.minecraft.world.entity.animal.horse.Horse;
+import net.minecraft.world.entity.animal.horse.Llama;
+import net.minecraft.world.entity.animal.Pig;
+import net.minecraft.world.entity.monster.Strider;
+import net.minecraft.util.Mth;
 import meteordevelopment.orbit.EventHandler;
 
 public class SethBoat extends Module {
@@ -171,23 +171,23 @@ public class SethBoat extends Module {
         float targetYaw = lockedYaw;
 
         // Apply rotation based on vehicle type
-        if (vehicle instanceof BoatEntity boat) {
+        if (vehicle instanceof AbstractBoat boat) {
             boat.setYaw(targetYaw);
             boat.prevYaw = targetYaw;
-        } else if (vehicle instanceof MinecartEntity minecart) {
+        } else if (vehicle instanceof Minecart minecart) {
             minecart.setYaw(targetYaw);
-        } else if (vehicle instanceof HorseEntity horse) {
+        } else if (vehicle instanceof Horse horse) {
             horse.setYaw(targetYaw);
             if (horse instanceof LivingEntity livingHorse) {
                 livingHorse.setBodyYaw(targetYaw);
             }
-        } else if (vehicle instanceof PigEntity pig) {
+        } else if (vehicle instanceof Pig pig) {
             pig.setYaw(targetYaw);
             pig.setBodyYaw(targetYaw);
-        } else if (vehicle instanceof StriderEntity strider) {
+        } else if (vehicle instanceof Strider strider) {
             strider.setYaw(targetYaw);
             strider.setBodyYaw(targetYaw);
-        } else if (vehicle instanceof LlamaEntity llama) {
+        } else if (vehicle instanceof Llama llama) {
             llama.setYaw(targetYaw);
             llama.setBodyYaw(targetYaw);
         }
@@ -209,12 +209,12 @@ public class SethBoat extends Module {
     }
 
     private boolean isRideableEntity(Entity entity) {
-        return entity instanceof BoatEntity ||
-            entity instanceof MinecartEntity ||
-            entity instanceof HorseEntity ||
-            entity instanceof PigEntity ||
-            entity instanceof StriderEntity ||
-            entity instanceof LlamaEntity ||
+        return entity instanceof AbstractBoat ||
+            entity instanceof Minecart ||
+            entity instanceof Horse ||
+            entity instanceof Pig ||
+            entity instanceof Strider ||
+            entity instanceof Llama ||
             entity.hasControllingPassenger();
     }
 
@@ -233,7 +233,7 @@ public class SethBoat extends Module {
      */
     private float snapToDirection(float yaw) {
         // Normalize yaw to 0-360 range
-        yaw = MathHelper.wrapDegrees(yaw);
+        yaw = Mth.wrapDegrees(yaw);
         if (yaw < 0) yaw += 360;
 
         // Calculate which direction index this yaw is closest to
