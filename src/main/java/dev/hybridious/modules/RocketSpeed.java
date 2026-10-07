@@ -5,8 +5,8 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.item.Items;
-import net.minecraft.util.Hand;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.InteractionHand;
 
 public class RocketSpeed extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
@@ -148,7 +148,7 @@ public class RocketSpeed extends Module {
         // Use fireworks
         for (int i = 0; i < fireworkCount.get(); i++) {
             mc.player.getInventory().selectedSlot = fireworkSlot;
-            mc.interactionManager.interactItem(mc.player, Hand.MAIN_HAND);
+            mc.interactionManager.interactItem(mc.player, InteractionHand.MAIN_HAND);
         }
 
         // Restore previous slot
