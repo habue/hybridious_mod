@@ -2,9 +2,9 @@ package dev.hybridious.modules;
 import dev.hybridious.Hybridious;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.item.map.MapState;
-import net.minecraft.component.type.MapIdComponent;
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
+import net.minecraft.world.level.saveddata.maps.MapId;
 import dev.hybridious.utils.*;
 
 import java.util.*;
@@ -96,7 +96,7 @@ public class MapFilterModule extends Module {
         mapHashes.clear();
 
         // Initialize hash cache
-        MinecraftClient client = MinecraftClient.getInstance();
+        Minecraft client = Minecraft.getInstance();
         String minecraftDir = client.runDirectory.getAbsolutePath();
         hashCache = new MapHashCache(minecraftDir);
 
@@ -142,7 +142,7 @@ public class MapFilterModule extends Module {
         if (cached != null) return cached;
 
         // Try to get map state
-        MapState state = getMapState(mapId);
+        MapItemSavedData state = getMapItemSavedData(mapId);
         if (state == null) {
             // Can't get map state - allow temporarily and retry next frame
             // This prevents blocking all maps on startup
@@ -195,18 +195,18 @@ public class MapFilterModule extends Module {
     }
 
     /**
-     * Get MapState - works for both singleplayer and multiplayer
+     * Get MapItemSavedData - works for both singleplayer and multiplayer
      */
-    private MapState getMapState(int mapId) {
-        MinecraftClient client = MinecraftClient.getInstance();
-        MapIdComponent mapIdComponent = new MapIdComponent(mapId);
+    private MapItemSavedData getMapItemSavedData(int mapId) {
+        Minecraft client = Minecraft.getInstance();
+        MapId mapIdComponent = new MapId(mapId);
 
         // Try integrated server first (singleplayer)
         if (client.getServer() != null) {
-            MapState state = client.getServer().getOverworld().getMapState(mapIdComponent);
+            MapItemSavedData state = client.getServer().getOverworld().getMapItemSavedData(mapIdComponent);
             if (state != null) {
                 if (logResults.get()) {
-                    System.out.println("[MapFilter] Got MapState for " + mapId + " from integrated server");
+                    System.out.println("[MapFilter] Got MapItemSavedData for " + mapId + " from integrated server");
                 }
                 return state;
             }
@@ -214,17 +214,17 @@ public class MapFilterModule extends Module {
 
         // Fall back to client world (multiplayer)
         if (client.world != null) {
-            MapState state = client.world.getMapState(mapIdComponent);
+            MapItemSavedData state = client.world.getMapItemSavedData(mapIdComponent);
             if (state != null) {
                 if (logResults.get()) {
-                    System.out.println("[MapFilter] Got MapState for " + mapId + " from client.world");
+                    System.out.println("[MapFilter] Got MapItemSavedData for " + mapId + " from client.world");
                 }
                 return state;
             }
         }
 
         if (logResults.get()) {
-            System.err.println("[MapFilter] Failed to get MapState for " + mapId);
+            System.err.println("[MapFilter] Failed to get MapItemSavedData for " + mapId);
         }
         return null;
     }
@@ -233,7 +233,7 @@ public class MapFilterModule extends Module {
      * Whitelist a map (mark as safe)
      */
     public boolean whitelistMap(int mapId) {
-        MapState state = getMapState(mapId);
+        MapItemSavedData state = getMapItemSavedData(mapId);
         if (state == null) return false;
 
         if (hashCache != null) {
@@ -256,7 +256,7 @@ public class MapFilterModule extends Module {
      * Blacklist a map (mark as NSFW)
      */
     public boolean blacklistMap(int mapId) {
-        MapState state = getMapState(mapId);
+        MapItemSavedData state = getMapItemSavedData(mapId);
         if (state == null) return false;
 
         if (hashCache != null) {
@@ -296,13 +296,13 @@ public class MapFilterModule extends Module {
 
     private void validateBatch(List<Integer> mapIds) {
         try {
-            Map<Integer, MapState> mapStates = new HashMap<>();
+            Map<Integer, MapItemSavedData> mapStates = new HashMap<>();
             Map<Integer, String> hashes = new HashMap<>();
             List<Integer> needValidation = new ArrayList<>();
 
             // First pass: compute hashes and check cache
             for (int mapId : mapIds) {
-                MapState state = getMapState(mapId);
+                MapItemSavedData state = getMapItemSavedData(mapId);
                 if (state != null) {
                     mapStates.put(mapId, state);
 
@@ -339,9 +339,9 @@ public class MapFilterModule extends Module {
             }
 
             // Prepare maps for API validation
-            Map<Integer, MapState> mapsToValidate = new HashMap<>();
+            Map<Integer, MapItemSavedData> mapsToValidate = new HashMap<>();
             for (int mapId : needValidation) {
-                MapState state = mapStates.get(mapId);
+                MapItemSavedData state = mapStates.get(mapId);
                 if (state != null) {
                     mapsToValidate.put(mapId, state);
                 }
