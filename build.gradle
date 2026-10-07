@@ -1,5 +1,5 @@
 plugins {
-    id "fabric-loom" version "1.8-SNAPSHOT"
+    id "fabric-loom" version "1.11-SNAPSHOT"
 }
 
 base {
@@ -13,6 +13,7 @@ loom {
 }
 
 repositories {
+    mavenCentral()
     maven {
         name = "Meteor Dev Releases"
         url = "https://maven.meteordev.org/releases"
@@ -24,14 +25,11 @@ repositories {
 }
 
 dependencies {
-    // Fabric
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+    mappings loom.officialMojangMappings()
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 
-    // Meteor
     modImplementation "meteordevelopment:meteor-client:${project.minecraft_version}-SNAPSHOT"
-    modCompileOnly "meteordevelopment:baritone:${project.baritone_version}"
 }
 
 tasks {
@@ -53,12 +51,12 @@ tasks {
     }
 
     java {
-        sourceCompatibility = JavaVersion.VERSION_21
-        targetCompatibility = JavaVersion.VERSION_21
+        sourceCompatibility = JavaVersion.VERSION_25
+        targetCompatibility = JavaVersion.VERSION_25
     }
 
     tasks.withType(JavaCompile).configureEach {
         it.options.encoding = "UTF-8"
-        it.options.release = 21
+        it.options.release = 25
     }
 }
