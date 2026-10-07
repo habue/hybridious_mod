@@ -5,10 +5,10 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.screen.slot.SlotActionType;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.inventory.ContainerInput;
 
 import java.util.*;
 
@@ -107,9 +107,9 @@ public class HotbarReplenish extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.interactionManager == null) return;
-        if (closeGui.get() && mc.currentScreen != null) return;
-        if (mc.player.currentScreenHandler != mc.player.playerScreenHandler) return;
+        if (mc.player == null || mc.gameMode == null) return;
+        if (closeGui.get() && mc.screen != null) return;
+        if (mc.player.containerMenu != mc.player.inventoryMenu) return;
 
         rebuildAssignments();
 
@@ -124,11 +124,11 @@ public class HotbarReplenish extends Module {
                 Item managedItem = entry.getKey();
                 int  hotbar      = entry.getValue();
 
-                if (dontReplaceHeld.get() && hotbar == mc.player.getInventory().selectedSlot) continue;
+                if (dontReplaceHeld.get() && hotbar == mc.player.getInventory().getSelectedSlot()) continue;
 
-                ItemStack current = mc.player.getInventory().getStack(hotbar);
+                ItemStack current = mc.player.getInventory().getItem(hotbar);
 
-                if (!current.isEmpty() && !current.isOf(managedItem)) {
+                if (!current.isEmpty() && !current.is(managedItem)) {
                     int freeMain = findFreeMainSlot();
                     if (freeMain != -1) {
                         pickUpAndPlace(invIndexToSlotId(hotbar), invIndexToSlotId(freeMain));
@@ -145,10 +145,10 @@ public class HotbarReplenish extends Module {
             for (int priority = 0; priority < SLOT_PRIORITY.length; priority++) {
                 int hotbar = SLOT_PRIORITY[priority];
 
-                if (dontReplaceHeld.get() && hotbar == mc.player.getInventory().selectedSlot) continue;
+                if (dontReplaceHeld.get() && hotbar == mc.player.getInventory().getSelectedSlot()) continue;
 
                 Item assigned = getItemForSlot(hotbar);
-                ItemStack current = mc.player.getInventory().getStack(hotbar);
+                ItemStack current = mc.player.getInventory().getItem(hotbar);
 
                 if (assigned == null) continue;
 
@@ -165,11 +165,11 @@ public class HotbarReplenish extends Module {
                     continue;
                 }
 
-                if (!current.isOf(assigned)) continue;
+                if (!current.is(assigned)) continue;
 
-                if (current.getMaxCount() <= 1) continue;
+                if (current.getMaxStackSize() <= 1) continue;
                 if (current.getCount() > threshold.get()) continue;
-                if (current.getCount() >= current.getMaxCount()) continue;
+                if (current.getCount() >= current.getMaxStackSize()) continue;
 
                 int sourceSlot = findRefill(assigned);
                 if (sourceSlot == -1) continue;
@@ -181,17 +181,17 @@ public class HotbarReplenish extends Module {
             }
         } else {
             for (int hotbar = 0; hotbar < 9; hotbar++) {
-                if (dontReplaceHeld.get() && hotbar == mc.player.getInventory().selectedSlot) continue;
+                if (dontReplaceHeld.get() && hotbar == mc.player.getInventory().getSelectedSlot()) continue;
 
-                ItemStack stack = mc.player.getInventory().getStack(hotbar);
+                ItemStack stack = mc.player.getInventory().getItem(hotbar);
 
                 if (stack.isEmpty()) {
                     continue;
                 }
 
-                if (stack.getMaxCount() <= 1) continue;
+                if (stack.getMaxStackSize() <= 1) continue;
                 if (stack.getCount() > threshold.get()) continue;
-                if (stack.getCount() >= stack.getMaxCount()) continue;
+                if (stack.getCount() >= stack.getMaxStackSize()) continue;
 
                 int sourceSlot = findRefill(stack.getItem());
                 if (sourceSlot == -1) continue;
@@ -240,8 +240,8 @@ public class HotbarReplenish extends Module {
         int bestCount = Integer.MAX_VALUE;
 
         for (int slot = 9; slot <= 35; slot++) {
-            ItemStack s = mc.player.getInventory().getStack(slot);
-            if (s.isEmpty() || !s.isOf(item)) continue;
+            ItemStack s = mc.player.getInventory().getItem(slot);
+            if (s.isEmpty() || !s.is(item)) continue;
             if (s.getCount() < bestCount) {
                 bestCount = s.getCount();
                 bestSlot  = slot;
@@ -252,7 +252,7 @@ public class HotbarReplenish extends Module {
 
     private int findFreeMainSlot() {
         for (int slot = 9; slot <= 35; slot++) {
-            if (mc.player.getInventory().getStack(slot).isEmpty()) return slot;
+            if (mc.player.getInventory().getItem(slot).isEmpty()) return slot;
         }
         return -1;
     }
@@ -266,17 +266,17 @@ public class HotbarReplenish extends Module {
     }
 
     private void pickUpAndPlace(int fromSlotId, int toSlotId) {
-        clickSlot(fromSlotId, 0, SlotActionType.PICKUP);
-        clickSlot(toSlotId,   0, SlotActionType.PICKUP);
+        clickSlot(fromSlotId, 0, ContainerInput.PICKUP);
+        clickSlot(toSlotId,   0, ContainerInput.PICKUP);
 
-        if (!mc.player.currentScreenHandler.getCursorStack().isEmpty()) {
-            clickSlot(fromSlotId, 0, SlotActionType.PICKUP);
+        if (!mc.player.containerMenu.getCarried().isEmpty()) {
+            clickSlot(fromSlotId, 0, ContainerInput.PICKUP);
         }
     }
 
-    private void clickSlot(int slotId, int button, SlotActionType action) {
-        mc.interactionManager.clickSlot(
-                mc.player.currentScreenHandler.syncId,
+    private void clickSlot(int slotId, int button, ContainerInput action) {
+        mc.gameMode.handleContainerInput(
+                mc.player.containerMenu.containerId,
                 slotId,
                 button,
                 action,
@@ -293,7 +293,7 @@ public class HotbarReplenish extends Module {
     private void snapshotHotbar() {
         if (mc.player == null) return;
         for (int i = 0; i < 9; i++) {
-            ItemStack s = mc.player.getInventory().getStack(i);
+            ItemStack s = mc.player.getInventory().getItem(i);
             prevHotbar[i] = s.isEmpty() ? Items.AIR : s.getItem();
         }
     }

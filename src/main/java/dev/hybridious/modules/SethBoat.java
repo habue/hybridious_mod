@@ -9,11 +9,11 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.Rotations;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.vehicle.AbstractBoat;
-import net.minecraft.world.entity.vehicle.Minecart;
-import net.minecraft.world.entity.animal.horse.Horse;
-import net.minecraft.world.entity.animal.horse.Llama;
-import net.minecraft.world.entity.animal.Pig;
+import net.minecraft.world.entity.vehicle.boat.AbstractBoat;
+import net.minecraft.world.entity.vehicle.minecart.Minecart;
+import net.minecraft.world.entity.animal.equine.Horse;
+import net.minecraft.world.entity.animal.equine.Llama;
+import net.minecraft.world.entity.animal.pig.Pig;
 import net.minecraft.world.entity.monster.Strider;
 import net.minecraft.util.Mth;
 import meteordevelopment.orbit.EventHandler;
@@ -109,7 +109,7 @@ public class SethBoat extends Module {
         isLocked = false;
         // Stop auto-walking
         if (mc.player != null) {
-            mc.options.forwardKey.setPressed(false);
+            mc.options.keyUp.setDown(false);
         }
     }
 
@@ -139,8 +139,8 @@ public class SethBoat extends Module {
     private void lockCurrentRotation() {
         if (mc.player == null) return;
 
-        float currentYaw = mc.player.getYaw();
-        float currentPitch = mc.player.getPitch();
+        float currentYaw = mc.player.getYRot();
+        float currentPitch = mc.player.getXRot();
 
         // Snap to nearest 24-direction
         lockedYaw = snapToDirection(currentYaw);
@@ -172,24 +172,24 @@ public class SethBoat extends Module {
 
         // Apply rotation based on vehicle type
         if (vehicle instanceof AbstractBoat boat) {
-            boat.setYaw(targetYaw);
-            boat.prevYaw = targetYaw;
+            boat.setYRot(targetYaw);
+            boat.yRotO = targetYaw;
         } else if (vehicle instanceof Minecart minecart) {
-            minecart.setYaw(targetYaw);
+            minecart.setYRot(targetYaw);
         } else if (vehicle instanceof Horse horse) {
-            horse.setYaw(targetYaw);
+            horse.setYRot(targetYaw);
             if (horse instanceof LivingEntity livingHorse) {
-                livingHorse.setBodyYaw(targetYaw);
+                livingHorse.setYBodyRot(targetYaw);
             }
         } else if (vehicle instanceof Pig pig) {
-            pig.setYaw(targetYaw);
-            pig.setBodyYaw(targetYaw);
+            pig.setYRot(targetYaw);
+            pig.setYBodyRot(targetYaw);
         } else if (vehicle instanceof Strider strider) {
-            strider.setYaw(targetYaw);
-            strider.setBodyYaw(targetYaw);
+            strider.setYRot(targetYaw);
+            strider.setYBodyRot(targetYaw);
         } else if (vehicle instanceof Llama llama) {
-            llama.setYaw(targetYaw);
-            llama.setBodyYaw(targetYaw);
+            llama.setYRot(targetYaw);
+            llama.setYBodyRot(targetYaw);
         }
 
         // Also apply rotation to player to keep camera aligned
@@ -202,9 +202,9 @@ public class SethBoat extends Module {
         boolean shouldWalk = !isRiding || walkInVehicles.get();
 
         if (shouldWalk) {
-            mc.options.forwardKey.setPressed(true);
+            mc.options.keyUp.setDown(true);
         } else {
-            mc.options.forwardKey.setPressed(false);
+            mc.options.keyUp.setDown(false);
         }
     }
 

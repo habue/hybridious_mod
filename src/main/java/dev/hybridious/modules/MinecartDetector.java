@@ -12,9 +12,9 @@ import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.vehicle.MinecartHopper;
-import net.minecraft.world.entity.vehicle.MinecartChest;
-import net.minecraft.world.entity.vehicle.AbstractMinecart;
+import net.minecraft.world.entity.vehicle.minecart.MinecartHopper;
+import net.minecraft.world.entity.vehicle.minecart.MinecartChest;
+import net.minecraft.world.entity.vehicle.minecart.AbstractMinecart;
 import net.minecraft.world.phys.Vec3;
 
 import java.io.BufferedWriter;
@@ -355,7 +355,7 @@ public class MinecartDetector extends Module {
 
     @Override
     public void onActivate() {
-        if (mc.world == null) return;
+        if (mc.level == null) return;
 
         // Initialize log files
         if (logToFile.get()) {
@@ -404,7 +404,7 @@ public class MinecartDetector extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.world == null || mc.player == null) return;
+        if (mc.level == null || mc.player == null) return;
 
         tickCounter++;
 
@@ -426,7 +426,7 @@ public class MinecartDetector extends Module {
         stackedMinecarts.clear();
         offRailsMinecarts.clear();
 
-        Vec3 playerPos = mc.player.getPos();
+        Vec3 playerPos = mc.player.position();
 
         // Track current session locations
         Set<String> currentWrongDirectionLocations = new HashSet<>();
@@ -435,7 +435,7 @@ public class MinecartDetector extends Module {
         List<Entity> containerMinecarts = new ArrayList<>();
 
         // Check all entities in render distance
-        for (Entity entity : mc.world.getEntities()) {
+        for (Entity entity : mc.level.entitiesForRendering()) {
 
             // Count minecarts for alert feature
             if (enableCountAlert.get()) {
@@ -498,7 +498,7 @@ public class MinecartDetector extends Module {
         }
 
         // Check water exclusion
-        BlockPos entityPos = entity.getBlockPos();
+        BlockPos entityPos = entity.blockPosition();
         if (excludeWaterMinecarts.get() && hasWaterNearby(entityPos)) {
             return;
         }
@@ -540,8 +540,8 @@ public class MinecartDetector extends Module {
 
         // Alert if needed
         if (shouldAlert) {
-            Vec3 pos = entity.getPos();
-            float yaw = entity.getYaw();
+            Vec3 pos = entity.position();
+            float yaw = entity.getYRot();
             String serverName = getServerName();
             String minecartType = getMinecartTypeName((AbstractMinecart) entity);
 
@@ -565,13 +565,13 @@ public class MinecartDetector extends Module {
                         entityPos.getY(),
                         entityPos.getZ(),
                         yaw,
-                        mc.player.getPos().distanceTo(pos));
+                        mc.player.position().distanceTo(pos));
                 writeToLogFile(moduleLogFile, logEntry, true);
             }
 
             // Play sound alert
             if (playSoundAlert.get()) {
-                mc.player.playSound(net.minecraft.sound.SoundEvents.BLOCK_NOTE_BLOCK_PLING.value(), 1.0f, 0.5f);
+                mc.player.playSound(net.minecraft.sounds.SoundEvents.NOTE_BLOCK_PLING.value(), 1.0f, 0.5f);
             }
 
             // Remember this location
@@ -581,17 +581,17 @@ public class MinecartDetector extends Module {
 
     private void checkOffRails(AbstractMinecart entity, Set<String> currentOffRailsLocations) {
         // Check if minecart is on rails
-        BlockPos entityPos = entity.getBlockPos();
+        BlockPos entityPos = entity.blockPosition();
 
         // Check the block at the minecart's position and below
         boolean onRails = false;
 
         // Check current position
-        if (isRailBlock(mc.world.getBlockState(entityPos))) {
+        if (isRailBlock(mc.level.getBlockState(entityPos))) {
             onRails = true;
         }
         // Check one block below (minecarts can be slightly above rails)
-        else if (isRailBlock(mc.world.getBlockState(entityPos.down()))) {
+        else if (isRailBlock(mc.level.getBlockState(entityPos.below()))) {
             onRails = true;
         }
 
@@ -642,7 +642,7 @@ public class MinecartDetector extends Module {
 
         // Alert if needed
         if (shouldAlert) {
-            Vec3 pos = entity.getPos();
+            Vec3 pos = entity.position();
             String serverName = getServerName();
             String minecartType = getMinecartTypeName(entity);
 
@@ -665,13 +665,13 @@ public class MinecartDetector extends Module {
                         entityPos.getX(),
                         entityPos.getY(),
                         entityPos.getZ(),
-                        mc.player.getPos().distanceTo(pos));
+                        mc.player.position().distanceTo(pos));
                 writeToLogFile(moduleLogFile, logEntry, true);
             }
 
             // Play sound alert
             if (playSoundAlert.get()) {
-                mc.player.playSound(net.minecraft.sound.SoundEvents.BLOCK_NOTE_BLOCK_BELL.value(), 1.0f, 1.5f);
+                mc.player.playSound(net.minecraft.sounds.SoundEvents.NOTE_BLOCK_BELL.value(), 1.0f, 1.5f);
             }
 
             // Remember this location
@@ -681,7 +681,7 @@ public class MinecartDetector extends Module {
 
     private boolean isRailBlock(net.minecraft.world.level.block.state.BlockState state) {
         // Check if the block is any type of rail using AbstractRailBlock
-        return state.getBlock() instanceof net.minecraft.block.AbstractRailBlock;
+        return state.getBlock() instanceof net.minecraft.world.level.block.BaseRailBlock;
     }
 
     private String getMinecartTypeName(AbstractMinecart entity) {
@@ -689,13 +689,13 @@ public class MinecartDetector extends Module {
             return "Chest minecart";
         } else if (entity instanceof MinecartHopper) {
             return "Hopper minecart";
-        } else if (entity instanceof net.minecraft.entity.vehicle.FurnaceMinecartEntity) {
+        } else if (entity instanceof net.minecraft.world.entity.vehicle.minecart.MinecartFurnace) {
             return "Furnace minecart";
-        } else if (entity instanceof net.minecraft.entity.vehicle.TntMinecartEntity) {
+        } else if (entity instanceof net.minecraft.world.entity.vehicle.minecart.MinecartTNT) {
             return "TNT minecart";
-        } else if (entity instanceof net.minecraft.entity.vehicle.SpawnerMinecartEntity) {
+        } else if (entity instanceof net.minecraft.world.entity.vehicle.minecart.MinecartSpawner) {
             return "Spawner minecart";
-        } else if (entity instanceof net.minecraft.entity.vehicle.CommandBlockMinecartEntity) {
+        } else if (entity instanceof net.minecraft.world.entity.vehicle.minecart.MinecartCommandBlock) {
             return "Command block minecart";
         } else {
             return "Minecart";
@@ -709,11 +709,11 @@ public class MinecartDetector extends Module {
 
         for (int i = 0; i < size; i++) {
             Entity minecart1 = containerMinecarts.get(i);
-            Vec3 pos1 = minecart1.getPos();
+            Vec3 pos1 = minecart1.position();
 
             for (int j = i + 1; j < size; j++) {
                 Entity minecart2 = containerMinecarts.get(j);
-                Vec3 pos2 = minecart2.getPos();
+                Vec3 pos2 = minecart2.position();
 
                 double distance = pos1.distanceTo(pos2);
 
@@ -722,7 +722,7 @@ public class MinecartDetector extends Module {
                     stackedMinecarts.add(minecart2);
 
                     // Create location key
-                    BlockPos blockPos = minecart1.getBlockPos();
+                    BlockPos blockPos = minecart1.blockPosition();
                     String locationKey = String.format("%d,%d,%d",
                             blockPos.getX(),
                             blockPos.getY(),
@@ -766,7 +766,7 @@ public class MinecartDetector extends Module {
 
                         // Play sound
                         if (playSoundAlert.get()) {
-                            mc.player.playSound(net.minecraft.sound.SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP, 1.0f, 1.0f);
+                            mc.player.playSound(net.minecraft.sounds.SoundEvents.EXPERIENCE_ORB_PICKUP, 1.0f, 1.0f);
                         }
 
                         // Remember this location
@@ -800,7 +800,7 @@ public class MinecartDetector extends Module {
 
                 // Play sound
                 if (playSoundOnCountAlert.get()) {
-                    mc.player.playSound(net.minecraft.sound.SoundEvents.BLOCK_ANVIL_LAND, 1.0f, 1.0f);
+                    mc.player.playSound(net.minecraft.sounds.SoundEvents.ANVIL_LAND, 1.0f, 1.0f);
                 }
 
                 // Log to file
@@ -867,9 +867,9 @@ public class MinecartDetector extends Module {
     private void renderBox(Render3DEvent event, Entity entity, Color color) {
         // Interpolate entity position for smoother rendering
         double delta = event.tickDelta;
-        double x = entity.prevX + (entity.getX() - entity.prevX) * delta;
-        double y = entity.prevY + (entity.getY() - entity.prevY) * delta;
-        double z = entity.prevZ + (entity.getZ() - entity.prevZ) * delta;
+        double x = entity.xo + (entity.getX() - entity.xo) * delta;
+        double y = entity.yo + (entity.getY() - entity.yo) * delta;
+        double z = entity.zo + (entity.getZ() - entity.zo) * delta;
 
         double width = 0.6;
         double height = 0.7;
@@ -889,28 +889,28 @@ public class MinecartDetector extends Module {
         if (mc.player == null) return;
 
         // Get camera position
-        Vec3 eyes = mc.player.getEyePos();
+        Vec3 eyes = mc.player.getEyePosition();
 
         // In first person, start tracer slightly forward from camera to make it more visible
         Vec3 startPos = eyes;
-        if (mc.options.getPerspective().isFirstPerson()) {
+        if (mc.options.getCameraType().isFirstPerson()) {
             // Get look direction and start tracer 0.5 blocks forward
-            Vec3 lookVec = mc.player.getRotationVec(event.tickDelta);
-            startPos = eyes.add(lookVec.multiply(0.5));
+            Vec3 lookVec = mc.player.getViewVector(event.tickDelta);
+            startPos = eyes.add(lookVec.scale(0.5));
         }
 
         // Interpolate entity position for smoother rendering
         double delta = event.tickDelta;
-        double x = entity.prevX + (entity.getX() - entity.prevX) * delta;
-        double y = entity.prevY + (entity.getY() - entity.prevY) * delta + 0.35; // Center of minecart
-        double z = entity.prevZ + (entity.getZ() - entity.prevZ) * delta;
+        double x = entity.xo + (entity.getX() - entity.xo) * delta;
+        double y = entity.yo + (entity.getY() - entity.yo) * delta + 0.35; // Center of minecart
+        double z = entity.zo + (entity.getZ() - entity.zo) * delta;
 
         event.renderer.line(startPos.x, startPos.y, startPos.z, x, y, z, color);
     }
 
     private boolean isCorrectlyOriented(Entity entity) {
         int entityId = entity.getId();
-        float currentYaw = entity.getYaw();
+        float currentYaw = entity.getYRot();
 
         // Check cache
         if (orientationCache.containsKey(entityId)) {
@@ -943,8 +943,8 @@ public class MinecartDetector extends Module {
         BlockPos[] positions = {
                 // Center and vertical
                 entityPos,
-                entityPos.down(),
-                entityPos.up(),
+                entityPos.below(),
+                entityPos.above(),
                 // Cardinal directions
                 entityPos.north(),
                 entityPos.south(),
@@ -956,19 +956,19 @@ public class MinecartDetector extends Module {
                 entityPos.south().east(),
                 entityPos.south().west(),
                 // Diagonal corners (one block down)
-                entityPos.down().north().east(),
-                entityPos.down().north().west(),
-                entityPos.down().south().east(),
-                entityPos.down().south().west()
+                entityPos.below().north().east(),
+                entityPos.below().north().west(),
+                entityPos.below().south().east(),
+                entityPos.below().south().west()
         };
 
         boolean hasWater = false;
 
         for (BlockPos pos : positions) {
-            if (!mc.world.isInBuildLimit(pos)) continue;
+            if (!mc.level.isInWorldBounds(pos)) continue;
 
-            if (mc.world.getBlockState(pos).getFluidState().isStill() ||
-                    !mc.world.getBlockState(pos).getFluidState().isEmpty()) {
+            if (mc.level.getBlockState(pos).getFluidState().isSource() ||
+                    !mc.level.getBlockState(pos).getFluidState().isEmpty()) {
                 hasWater = true;
                 break;
             }
@@ -1014,10 +1014,10 @@ public class MinecartDetector extends Module {
     }
 
     private String getServerName() {
-        if (mc.isIntegratedServerRunning()) {
+        if (mc.hasSingleplayerServer()) {
             return "Singleplayer";
-        } else if (mc.getCurrentServerEntry() != null) {
-            return mc.getCurrentServerEntry().address;
+        } else if (mc.getCurrentServer() != null) {
+            return mc.getCurrentServer().ip;
         } else {
             return "Unknown Server";
         }

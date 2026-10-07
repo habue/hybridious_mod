@@ -1,6 +1,7 @@
 package dev.hybridious.modules;
 
 import dev.hybridious.Hybridious;
+import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.BoolSetting;
 import meteordevelopment.meteorclient.settings.DoubleSetting;
@@ -175,14 +176,14 @@ public class handmoss extends Module {
         azaleaCooldownMap.clear();
     }
 
-    @EventInteractionHandler
+    @EventHandler
     private void onTick(TickEvent.Pre event) {
         if (delayTimer > 0) {
             delayTimer--;
             return;
         }
 
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         updateMossCooldowns();
 
@@ -197,17 +198,17 @@ public class handmoss extends Module {
         for (BlockPos blockPos : targets) {
             if (uses >= maxUsesPerTick.get()) break;
 
-            BlockState state = mc.world.getBlockState(blockPos);
+            BlockState state = mc.level.getBlockState(blockPos);
             Block block = state.getBlock();
-            boolean isMoss = block.getTranslationKey().contains("moss_block");
+            boolean isMoss = block.getDescriptionId().contains("moss_block");
 
             if (isMoss && recentlyUsedMoss.containsKey(blockPos)) continue;
 
             Vec3 hitPos = new Vec3(blockPos.getX() + 0.5, blockPos.getY() + 0.5, blockPos.getZ() + 0.5);
             BlockHitResult hit = new BlockHitResult(hitPos, Direction.UP, blockPos, false);
 
-            mc.player.getInventory().selectedSlot = boneMealSlot;
-            mc.interactionManager.interactBlock(mc.player, InteractionHand.MAIN_HAND, hit);
+            mc.player.getInventory().setSelectedSlot(boneMealSlot);
+            mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, hit);
 
             if (isMoss) {
                 recentlyUsedMoss.put(new BlockPos(blockPos), mossSpreadCooldown.get());
@@ -236,23 +237,23 @@ public class handmoss extends Module {
     private List<BlockPos> findTargets() {
         List<BlockPos> targets = new ArrayList<>();
 
-        if (mc.player == null || mc.world == null) return targets;
+        if (mc.player == null || mc.level == null) return targets;
 
         double rangeSq = range.get() * range.get();
-        BlockPos playerPos = mc.player.getBlockPos();
+        BlockPos playerPos = mc.player.blockPosition();
 
         for (int x = (int) -range.get(); x <= range.get(); x++) {
             for (int y = (int) -range.get(); y <= range.get(); y++) {
                 for (int z = (int) -range.get(); z <= range.get(); z++) {
-                    BlockPos pos = playerPos.add(x, y, z);
+                    BlockPos pos = playerPos.offset(x, y, z);
 
-                    if (pos.getSquaredDistance(playerPos) > rangeSq) continue;
+                    if (pos.distSqr(playerPos) > rangeSq) continue;
 
                     if (!hasLineOfSight(pos)) continue;
 
-                    BlockState state = mc.world.getBlockState(pos);
+                    BlockState state = mc.level.getBlockState(pos);
                     Block block = state.getBlock();
-                    String blockName = block.getTranslationKey().toLowerCase();
+                    String blockName = block.getDescriptionId().toLowerCase();
 
                     if (makeTrees.get()) {
                         boolean isAzalea = blockName.contains("azalea") && !blockName.contains("tree");
@@ -284,10 +285,10 @@ public class handmoss extends Module {
 
     private boolean hasValidNeighbor(BlockPos pos) {
         for (Direction dir : Direction.values()) {
-            BlockPos neighborPos = pos.offset(dir);
-            BlockState neighborState = mc.world.getBlockState(neighborPos);
+            BlockPos neighborPos = pos.relative(dir);
+            BlockState neighborState = mc.level.getBlockState(neighborPos);
             Block neighborBlock = neighborState.getBlock();
-            String blockName = neighborBlock.getTranslationKey().toLowerCase();
+            String blockName = neighborBlock.getDescriptionId().toLowerCase();
 
             if (blockName.contains("azalea") ||
                     blockName.contains("tall_grass") ||
@@ -304,20 +305,20 @@ public class handmoss extends Module {
     }
 
     private boolean hasLineOfSight(BlockPos pos) {
-        if (mc.player == null || mc.world == null) return false;
+        if (mc.player == null || mc.level == null) return false;
 
-        Vec3 eyePos = mc.player.getEyePos();
+        Vec3 eyePos = mc.player.getEyePosition();
         Vec3 blockPos = new Vec3(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
 
         ClipContext context = new ClipContext(
                 eyePos,
                 blockPos,
-                ClipContext.ShapeType.COLLIDER,
-                ClipContext.FluidInteractionHandling.NONE,
+                ClipContext.Block.COLLIDER,
+                ClipContext.Fluid.NONE,
                 mc.player
         );
 
-        BlockHitResult result = mc.world.raycast(context);
+        BlockHitResult result = mc.level.clip(context);
         return result.getBlockPos().equals(pos);
     }
 
@@ -325,24 +326,24 @@ public class handmoss extends Module {
         if (mc.player == null) return -1;
 
         for (int i = 0; i < 9; i++) {
-            if (mc.player.getInventory().getStack(i).getItem() == Items.BONE_MEAL) {
+            if (mc.player.getInventory().getItem(i).getItem() == Items.BONE_MEAL) {
                 return i;
             }
         }
 
         if (inventoryAllow.get()) {
             for (int i = 9; i < 36; i++) {
-                if (mc.player.getInventory().getStack(i).getItem() == Items.BONE_MEAL) {
+                if (mc.player.getInventory().getItem(i).getItem() == Items.BONE_MEAL) {
                     int emptySlot = -1;
                     for (int j = 0; j < 9; j++) {
-                        if (mc.player.getInventory().getStack(j).isEmpty()) {
+                        if (mc.player.getInventory().getItem(j).isEmpty()) {
                             emptySlot = j;
                             break;
                         }
                     }
 
                     if (emptySlot != -1) {
-                        mc.interactionManager.clickSlot(0, i, emptySlot, ContainerInput.SWAP, mc.player);
+                        mc.gameMode.handleContainerInput(0, i, emptySlot, ContainerInput.SWAP, mc.player);
                         return emptySlot;
                     }
                     break;

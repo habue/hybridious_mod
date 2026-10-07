@@ -61,7 +61,7 @@ public class SnowClearer extends Module {
 
     /** Called directly by AutoMoss when it controls scheduling. */
     public void tick() {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
         if (timer > 0) { timer--; return; }
 
         cachedTargets = findTargets();
@@ -77,11 +77,11 @@ public class SnowClearer extends Module {
         }
 
         cachedTargets.sort((a, b) -> Double.compare(
-                mc.player.squaredDistanceTo(Vec3.ofCenter(a)),
-                mc.player.squaredDistanceTo(Vec3.ofCenter(b))));
+                mc.player.distanceToSqr(Vec3.atCenterOf(a)),
+                mc.player.distanceToSqr(Vec3.atCenterOf(b))));
 
         // Remember current slot so we can swap back
-        int prevSlot = mc.player.getInventory().selectedSlot;
+        int prevSlot = mc.player.getInventory().getSelectedSlot();
         boolean swappedThisTick = false;
 
         int count = 0;
@@ -103,14 +103,14 @@ public class SnowClearer extends Module {
 
         // Restore previous slot so player isn't stuck holding shovel
         if (swappedThisTick && swapBack.get()) {
-            mc.player.getInventory().selectedSlot = prevSlot;
+            mc.player.getInventory().setSelectedSlot(prevSlot);
         }
     }
 
     private List<BlockPos> findTargets() {
         List<BlockPos> targets = new ArrayList<>();
-        if (mc.player == null || mc.world == null) return targets;
-        BlockPos origin = mc.player.getBlockPos();
+        if (mc.player == null || mc.level == null) return targets;
+        BlockPos origin = mc.player.blockPosition();
         int r = range.get();
         double rangeSq = (double) r * r;
 
@@ -118,8 +118,8 @@ public class SnowClearer extends Module {
             for (int y = -r; y <= r; y++) {
                 for (int z = -r; z <= r; z++) {
                     if (x*x + y*y + z*z > rangeSq) continue;
-                    BlockPos pos = origin.add(x, y, z);
-                    net.minecraft.block.Block block = mc.world.getBlockState(pos).getBlock();
+                    BlockPos pos = origin.offset(x, y, z);
+                    net.minecraft.world.level.block.Block block = mc.level.getBlockState(pos).getBlock();
                     if (block == Blocks.SNOW || block == Blocks.SNOW_BLOCK)
                         targets.add(pos);
                 }
@@ -130,7 +130,7 @@ public class SnowClearer extends Module {
 
     @Override
     public String getInfoString() {
-        if (mc.player == null || mc.world == null) return null;
+        if (mc.player == null || mc.level == null) return null;
         return String.valueOf(cachedTargets.size());
     }
 }

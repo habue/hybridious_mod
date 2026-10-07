@@ -11,7 +11,7 @@ import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.meteorclient.utils.player.Rotations;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.world.level.block.ShulkerAABBBlock;
+import net.minecraft.world.level.block.ShulkerBoxBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.item.component.ItemContainerContents;
@@ -23,16 +23,16 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
-import net.minecraft.core.registries.BuiltInBuiltInRegistries;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.inventory.ChestMenu;
-import net.minecraft.world.inventory.ShulkerAABBMenu;
+import net.minecraft.world.inventory.ShulkerBoxMenu;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.core.Direction;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -426,7 +426,7 @@ public class ShulkerRestock extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null || mc.interactionManager == null) return;
+        if (mc.player == null || mc.level == null || mc.gameMode == null) return;
 
 
         if (baritoneCmdCooldown > 0) baritoneCmdCooldown--;
@@ -520,7 +520,7 @@ public class ShulkerRestock extends Module {
             return;
         }
 
-        shulkerItemPlaced = mc.player.getInventory().getStack(invShulkerSlot).getItem();
+        shulkerItemPlaced = mc.player.getInventory().getItem(invShulkerSlot).getItem();
 
 
 
@@ -536,7 +536,7 @@ public class ShulkerRestock extends Module {
         }
 
         int freeHotbar = firstFreeHotbarSlot();
-        int destHotbar = (freeHotbar != -1) ? freeHotbar : mc.player.getInventory().selectedSlot;
+        int destHotbar = (freeHotbar != -1) ? freeHotbar : mc.player.getInventory().getSelectedSlot();
 
         InvUtils.move().from(invShulkerSlot).to(destHotbar);
         shulkerHotbarSlot = destHotbar;
@@ -553,7 +553,7 @@ public class ShulkerRestock extends Module {
         }
 
         InvUtils.swap(shulkerHotbarSlot, false);
-        if (!isShulkerAABB(mc.player.getMainHandStack())) {
+        if (!isShulkerAABB(mc.player.getMainHandItem())) {
             if (failAttempt("Hand isn't holding the shulker")) { abort(); }
             delayTimer = actionDelay.get();
             return;
@@ -604,11 +604,11 @@ public class ShulkerRestock extends Module {
 
         triedSupportPlace = true;
         placedInAir = false;
-        placedPos = hit.getBlockPos().offset(hit.getSide());
-        Vec3d aim = hit.getPos();
+        placedPos = hit.getBlockPos().relative(hit.getDirection());
+        Vec3 aim = hit.getLocation();
         Rotations.rotate(Rotations.getYaw(aim), Rotations.getPitch(aim), rotationPriority.get(), () -> {
-            InteractionResult result = mc.interactionManager.interactBlock(mc.player, InteractionHand.MAIN_HAND, hit);
-            if (result.isAccepted()) mc.player.swingHand(InteractionHand.MAIN_HAND);
+            InteractionResult result = mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, hit);
+            if (result.consumesAction()) mc.player.swing(InteractionHand.MAIN_HAND);
         });
         delayTimer = actionDelay.get();
         enter(State.CONFIRM_PLACE);
@@ -628,7 +628,7 @@ public class ShulkerRestock extends Module {
 
         sendOffhandSwap();
         offhandSwapped = true;
-        Vec3d aim = hit.getPos();
+        Vec3 aim = hit.getLocation();
         Rotations.rotate(Rotations.getYaw(aim), Rotations.getPitch(aim), rotationPriority.get());
 
         delayTimer = Math.max(1, actionDelay.get());
@@ -644,7 +644,7 @@ public class ShulkerRestock extends Module {
             retry(State.PLACE);
             return;
         }
-        Vec3d aim = airHit.getPos();
+        Vec3 aim = airHit.getLocation();
         Rotations.rotate(Rotations.getYaw(aim), Rotations.getPitch(aim), rotationPriority.get());
         delayTimer = Math.max(1, actionDelay.get());
         enter(State.AIR_INTERACT);
@@ -658,10 +658,10 @@ public class ShulkerRestock extends Module {
             return;
         }
         final BlockHitResult hit = airHit;
-        Vec3d aim = hit.getPos();
+        Vec3 aim = hit.getLocation();
         Rotations.rotate(Rotations.getYaw(aim), Rotations.getPitch(aim), rotationPriority.get(), () -> {
-            InteractionResult result = mc.interactionManager.interactBlock(mc.player, InteractionHand.OFF_HAND, hit);
-            if (result.isAccepted()) mc.player.swingHand(InteractionHand.OFF_HAND);
+            InteractionResult result = mc.gameMode.useItemOn(mc.player, InteractionHand.OFF_HAND, hit);
+            if (result.consumesAction()) mc.player.swing(InteractionHand.OFF_HAND);
         });
         delayTimer = Math.max(1, actionDelay.get());
         enter(State.AIR_SWAP_BACK);
@@ -733,12 +733,12 @@ public class ShulkerRestock extends Module {
         }
 
         Direction side = bestVisibleSide(placedPos);
-        Vec3d facePoint = faceHitPoint(placedPos, side);
+        Vec3 facePoint = faceHitPoint(placedPos, side);
         BlockHitResult openHit = new BlockHitResult(facePoint, side, placedPos, false);
 
         Rotations.rotate(Rotations.getYaw(facePoint), Rotations.getPitch(facePoint), rotationPriority.get(), () -> {
-            InteractionResult result = mc.interactionManager.interactBlock(mc.player, InteractionHand.MAIN_HAND, openHit);
-            if (result.isAccepted()) mc.player.swingHand(InteractionHand.MAIN_HAND);
+            InteractionResult result = mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, openHit);
+            if (result.consumesAction()) mc.player.swing(InteractionHand.MAIN_HAND);
         });
 
         delayTimer = actionDelay.get() + 1;
@@ -753,7 +753,7 @@ public class ShulkerRestock extends Module {
 
 
 
-                int maxStack = Math.max(1, new ItemStack(target()).getMaxCount());
+                int maxStack = Math.max(1, new ItemStack(target()).getMaxStackSize());
                 int wanted = targetStacks * maxStack;
                 itemsToExtract = wanted;
                 extractTargetCount = targetCountBefore + wanted;
@@ -802,7 +802,7 @@ public class ShulkerRestock extends Module {
         if (current >= extractTargetCount || firstFreeAnySlot() == -1) {
             int gained = current - targetCountBefore;
             if (gained > 0) info("Restocked " + gained + "x " + nameOf(target()) + ".");
-            mc.player.closeHandledScreen();
+            mc.player.closeContainer();
             delayTimer = actionDelay.get();
             enter(recoverState());
             return;
@@ -828,7 +828,7 @@ public class ShulkerRestock extends Module {
                         if (gained > 0) info("Restocked " + gained + "x " + nameOf(target())
                                 + " (stopped early - no further progress).");
                         else warning("Couldn't pull " + nameOf(target()) + " from the shulker.");
-                        mc.player.closeHandledScreen();
+                        mc.player.closeContainer();
                         delayTimer = actionDelay.get();
                         enter(recoverState());
                     }
@@ -841,10 +841,10 @@ public class ShulkerRestock extends Module {
         }
 
 
-        int containerSlots = mc.player.currentScreenHandler.slots.size() - 36;
+        int containerSlots = mc.player.containerMenu.slots.size() - 36;
         int slot = -1;
         for (int i = 0; i < containerSlots; i++) {
-            if (mc.player.currentScreenHandler.getSlot(i).getStack().isOf(target())) {
+            if (mc.player.containerMenu.getSlot(i).getItem().is(target())) {
                 slot = i;
                 break;
             }
@@ -854,7 +854,7 @@ public class ShulkerRestock extends Module {
             int gained = current - targetCountBefore;
             if (gained > 0) info("Restocked " + gained + "x " + nameOf(target()) + ".");
             else info("No " + nameOf(target()) + " left in the shulker.");
-            mc.player.closeHandledScreen();
+            mc.player.closeContainer();
             delayTimer = actionDelay.get();
             enter(recoverState());
             return;
@@ -885,8 +885,8 @@ public class ShulkerRestock extends Module {
 
 
     private void stepMine() {
-        if (mc.currentScreen != null) {
-            mc.player.closeHandledScreen();
+        if (mc.screen != null) {
+            mc.player.closeContainer();
             delayTimer = actionDelay.get();
             return;
         }
@@ -992,7 +992,7 @@ public class ShulkerRestock extends Module {
             return;
         }
 
-        BlockPos pos = dropped.getBlockPos();
+        BlockPos pos = dropped.blockPosition();
         if (baritoneCmd("goto " + pos.getX() + " " + pos.getY() + " " + pos.getZ())) {
             info("Moving to dropped shulker item with Baritone...");
             retry(State.WAIT_PICKUP);
@@ -1084,8 +1084,8 @@ public class ShulkerRestock extends Module {
 
         if (blockStillPlaced) {
 
-            if (mc.currentScreen != null) {
-                mc.player.closeHandledScreen();
+            if (mc.screen != null) {
+                mc.player.closeContainer();
                 delayTimer = actionDelay.get();
                 return;
             }
@@ -1097,7 +1097,7 @@ public class ShulkerRestock extends Module {
 
 
         if (dropped != null) {
-            BlockPos pos = dropped.getBlockPos();
+            BlockPos pos = dropped.blockPosition();
             if (baritoneCmd("goto " + pos.getX() + " " + pos.getY() + " " + pos.getZ())) {
                 info("Recovering dropped shulker before disabling...");
             }
@@ -1171,14 +1171,14 @@ public class ShulkerRestock extends Module {
 
     private boolean nearbyLivingEntityForKillAura() {
         double range = combatPauseRange.get();
-        List<LivingEntity> entities = mc.world.getEntitiesByClass(
+        List<LivingEntity> entities = mc.level.getEntitiesOfClass(
                 LivingEntity.class,
-                mc.player.getBoundingAABB().expand(range),
+                mc.player.getBoundingBox().inflate(range),
                 e -> e != mc.player
                         && !(e instanceof Player)
                         && e.isAlive()
                         && !e.isSpectator()
-                        && mc.player.squaredDistanceTo(e) <= range * range
+                        && mc.player.distanceToSqr(e) <= range * range
         );
         return !entities.isEmpty();
     }
@@ -1193,7 +1193,7 @@ public class ShulkerRestock extends Module {
 
     private int findShulkerContaining(Item target) {
         for (int i = 0; i < 36; i++) {
-            ItemStack stack = mc.player.getInventory().getStack(i);
+            ItemStack stack = mc.player.getInventory().getItem(i);
             if (!isShulkerAABB(stack)) continue;
             if (shulkerContains(stack, target)) return i;
         }
@@ -1203,8 +1203,8 @@ public class ShulkerRestock extends Module {
     private boolean shulkerContains(ItemStack shulker, Item target) {
         ItemContainerContents container = shulker.get(DataComponents.CONTAINER);
         if (container == null) return false;
-        for (ItemStack inner : container.iterateNonEmpty()) {
-            if (inner.isOf(target)) return true;
+        for (ItemStack inner : container.nonEmptyItemCopyStream().toList()) {
+            if (inner.is(target)) return true;
         }
         return false;
     }
@@ -1212,7 +1212,7 @@ public class ShulkerRestock extends Module {
     private boolean isShulkerAABB(ItemStack stack) {
         if (stack.isEmpty()) return false;
         return stack.getItem() instanceof BlockItem blockItem
-                && blockItem.getBlock() instanceof ShulkerAABBBlock;
+                && blockItem.getBlock() instanceof ShulkerBoxBlock;
     }
 
     private int computeTargetStacks() {
@@ -1226,7 +1226,7 @@ public class ShulkerRestock extends Module {
     private int countEmptyInventorySlots() {
         int empty = 0;
         for (int i = 0; i < 36; i++) {
-            if (mc.player.getInventory().getStack(i).isEmpty()) empty++;
+            if (mc.player.getInventory().getItem(i).isEmpty()) empty++;
         }
         return empty;
     }
@@ -1234,8 +1234,8 @@ public class ShulkerRestock extends Module {
     private int countItemInInventory(Item item) {
         int count = 0;
         for (int i = 0; i < 36; i++) {
-            ItemStack stack = mc.player.getInventory().getStack(i);
-            if (stack.isOf(item)) count += stack.getCount();
+            ItemStack stack = mc.player.getInventory().getItem(i);
+            if (stack.is(item)) count += stack.getCount();
         }
         return count;
     }
@@ -1244,7 +1244,7 @@ public class ShulkerRestock extends Module {
     private int countAnyShulkerInInventory() {
         int count = 0;
         for (int i = 0; i < 36; i++) {
-            ItemStack stack = mc.player.getInventory().getStack(i);
+            ItemStack stack = mc.player.getInventory().getItem(i);
             if (isShulkerAABB(stack)) count += stack.getCount();
         }
         return count;
@@ -1252,30 +1252,30 @@ public class ShulkerRestock extends Module {
 
     private int firstFreeHotbarSlot() {
         for (int i = 0; i < 9; i++) {
-            if (mc.player.getInventory().getStack(i).isEmpty()) return i;
+            if (mc.player.getInventory().getItem(i).isEmpty()) return i;
         }
         return -1;
     }
 
     private int firstFreeMainInventoryIndex() {
         for (int i = 9; i < 36; i++) {
-            if (mc.player.getInventory().getStack(i).isEmpty()) return i;
+            if (mc.player.getInventory().getItem(i).isEmpty()) return i;
         }
         return -1;
     }
 
     private int firstFreeAnySlot() {
         for (int i = 0; i < 36; i++) {
-            if (mc.player.getInventory().getStack(i).isEmpty()) return i;
+            if (mc.player.getInventory().getItem(i).isEmpty()) return i;
         }
         return -1;
     }
 
     private int findShulkerInHotbar(Item shulkerType) {
         for (int i = 0; i < 9; i++) {
-            ItemStack stack = mc.player.getInventory().getStack(i);
+            ItemStack stack = mc.player.getInventory().getItem(i);
             if (stack.isEmpty()) continue;
-            if (shulkerType != null ? stack.isOf(shulkerType) : isShulkerAABB(stack)) return i;
+            if (shulkerType != null ? stack.is(shulkerType) : isShulkerAABB(stack)) return i;
         }
         return -1;
     }
@@ -1286,15 +1286,15 @@ public class ShulkerRestock extends Module {
 
     private boolean placedShulkerPresent() {
         return placedPos != null
-                && mc.world.getBlockState(placedPos).getBlock() instanceof ShulkerAABBBlock;
+                && mc.level.getBlockState(placedPos).getBlock() instanceof ShulkerBoxBlock;
     }
 
 
     private BlockHitResult findPlacement() {
         int r = placeRange.get();
-        BlockPos origin = mc.player.getBlockPos();
-        Vec3d eye = mc.player.getEyePos();
-        double reach = mc.player.getBlockInteractionRange();
+        BlockPos origin = mc.player.blockPosition();
+        Vec3 eye = mc.player.getEyePosition();
+        double reach = mc.player.blockInteractionRange();
 
         List<BlockPos> candidates = new ArrayList<>();
 
@@ -1302,24 +1302,24 @@ public class ShulkerRestock extends Module {
         for (int dx = -r; dx <= r; dx++) {
             for (int dy = -r; dy <= r; dy++) {
                 for (int dz = -r; dz <= r; dz++) {
-                    candidates.add(origin.add(dx, dy, dz));
+                    candidates.add(origin.offset(dx, dy, dz));
                 }
             }
         }
 
 
-        candidates.sort(Comparator.comparingDouble(p -> Vec3d.ofCenter(p).squaredDistanceTo(eye)));
+        candidates.sort(Comparator.comparingDouble(p -> Vec3.atCenterOf(p).distanceToSqr(eye)));
 
         for (BlockPos cell : candidates) {
 
-            if (!mc.world.getBlockState(cell).isReplaceable()) continue;
+            if (!mc.level.getBlockState(cell).canBeReplaced()) continue;
             if (positionIntersectsPlayer(cell)) continue;
 
 
 
             for (Direction normal : Direction.values()) {
-                BlockPos support = cell.offset(normal);
-                if (!mc.world.getBlockState(support).isSolidBlock(mc.world, support)) continue;
+                BlockPos support = cell.relative(normal);
+                if (!mc.level.getBlockState(support).isRedstoneConductor(mc.level, support)) continue;
 
 
 
@@ -1330,10 +1330,10 @@ public class ShulkerRestock extends Module {
 
                 if (!canShulkerOpenAt(cell, clickedFace)) continue;
 
-                Vec3d hitVec = Vec3d.ofCenter(support).add(
-                        clickedFace.getOffsetX() * 0.5,
-                        clickedFace.getOffsetY() * 0.5,
-                        clickedFace.getOffsetZ() * 0.5);
+                Vec3 hitVec = Vec3.atCenterOf(support).add(
+                        clickedFace.getStepX() * 0.5,
+                        clickedFace.getStepY() * 0.5,
+                        clickedFace.getStepZ() * 0.5);
 
 
                 if (eye.distanceTo(hitVec) > reach + 0.3) continue;
@@ -1346,24 +1346,24 @@ public class ShulkerRestock extends Module {
 
 
     private BlockHitResult tryFace(BlockPos support) {
-        if (!mc.world.getBlockState(support).isSolidBlock(mc.world, support)) return null;
+        if (!mc.level.getBlockState(support).isRedstoneConductor(mc.level, support)) return null;
 
-        BlockPos above = support.up();
-        if (!mc.world.getBlockState(above).isReplaceable()) return null;
+        BlockPos above = support.above();
+        if (!mc.level.getBlockState(above).canBeReplaced()) return null;
         if (positionIntersectsPlayer(above)) return null;
 
-        Vec3d hitVec = Vec3d.ofCenter(support).add(0, 0.5, 0);
-        if (mc.player.getEyePos().distanceTo(hitVec) > mc.player.getBlockInteractionRange() + 0.5) return null;
+        Vec3 hitVec = Vec3.atCenterOf(support).add(0, 0.5, 0);
+        if (mc.player.getEyePosition().distanceTo(hitVec) > mc.player.blockInteractionRange() + 0.5) return null;
 
         return new BlockHitResult(hitVec, Direction.UP, support, false);
     }
 
 
     private BlockHitResult findAirPlacement() {
-        Vec3d eye = mc.player.getEyePos();
-        Vec3d look = mc.player.getRotationVec(1.0f);
+        Vec3 eye = mc.player.getEyePosition();
+        Vec3 look = mc.player.getViewVector(1.0f);
         double base = placeDistance.get();
-        double reach = mc.player.getBlockInteractionRange();
+        double reach = mc.player.blockInteractionRange();
 
 
 
@@ -1373,10 +1373,10 @@ public class ShulkerRestock extends Module {
             if (dist < 1.2) continue;
             if (dist > reach + 0.5) continue;
 
-            Vec3d point = eye.add(look.multiply(dist));
-            BlockPos pos = BlockPos.ofFloored(point);
+            Vec3 point = eye.add(look.scale(dist));
+            BlockPos pos = BlockPos.containing(point);
 
-            if (!mc.world.getBlockState(pos).isReplaceable()) continue;
+            if (!mc.level.getBlockState(pos).canBeReplaced()) continue;
             if (positionIntersectsPlayer(pos)) continue;
             if (positionIntersectsEntity(pos)) continue;
 
@@ -1390,7 +1390,7 @@ public class ShulkerRestock extends Module {
 
             if (!canShulkerOpenAt(pos, side)) continue;
 
-            Vec3d hitVec = faceHitPoint(pos, side);
+            Vec3 hitVec = faceHitPoint(pos, side);
             if (eye.distanceTo(hitVec) > reach + 0.3) continue;
 
             return new BlockHitResult(hitVec, side, pos, false);
@@ -1401,25 +1401,25 @@ public class ShulkerRestock extends Module {
 
     private boolean positionIntersectsPlayer(BlockPos pos) {
         AABB block = new AABB(pos);
-        return mc.player.getBoundingAABB().intersects(block);
+        return mc.player.getBoundingBox().intersects(block);
     }
 
 
     private boolean canShulkerOpenAt(BlockPos cell, Direction clickedFace) {
-        BlockPos lidCell = cell.offset(clickedFace);
-        return mc.world.getBlockState(lidCell).isReplaceable();
+        BlockPos lidCell = cell.relative(clickedFace);
+        return mc.level.getBlockState(lidCell).canBeReplaced();
     }
 
 
     private boolean positionIntersectsEntity(BlockPos pos) {
         AABB block = new AABB(pos);
-        List<LivingEntity> entities = mc.world.getEntitiesByClass(LivingEntity.class, block, e -> e.isAlive());
+        List<LivingEntity> entities = mc.level.getEntitiesOfClass(LivingEntity.class, block, e -> e.isAlive());
         return !entities.isEmpty();
     }
 
     private Direction bestVisibleSide(BlockPos pos) {
-        Vec3d eyes = mc.player.getEyePos();
-        Vec3d center = Vec3d.ofCenter(pos);
+        Vec3 eyes = mc.player.getEyePosition();
+        Vec3 center = Vec3.atCenterOf(pos);
         double dx = eyes.x - center.x;
         double dy = eyes.y - center.y;
         double dz = eyes.z - center.z;
@@ -1430,15 +1430,15 @@ public class ShulkerRestock extends Module {
         return dy >= 0 ? Direction.UP : Direction.DOWN;
     }
 
-    private Vec3d faceHitPoint(BlockPos pos, Direction side) {
-        Vec3d c = Vec3d.ofCenter(pos);
-        return c.add(side.getOffsetX() * 0.5, side.getOffsetY() * 0.5, side.getOffsetZ() * 0.5);
+    private Vec3 faceHitPoint(BlockPos pos, Direction side) {
+        Vec3 c = Vec3.atCenterOf(pos);
+        return c.add(side.getStepX() * 0.5, side.getStepY() * 0.5, side.getStepZ() * 0.5);
     }
 
     private boolean isContainerScreenOpen() {
-        if (mc.player.currentScreenHandler instanceof ShulkerAABBMenu) return true;
-        return mc.player.currentScreenHandler instanceof ChestMenu g
-                && g.getRows() == 3
+        if (mc.player.containerMenu instanceof ShulkerBoxMenu) return true;
+        return mc.player.containerMenu instanceof ChestMenu g
+                && g.getRowCount() == 3
                 && placedShulkerPresent();
     }
 
@@ -1447,16 +1447,16 @@ public class ShulkerRestock extends Module {
     }
 
     private ItemEntity nearestDroppedShulker() {
-        List<ItemEntity> items = mc.world.getEntitiesByClass(
+        List<ItemEntity> items = mc.level.getEntitiesOfClass(
                 ItemEntity.class,
-                mc.player.getBoundingAABB().expand(12),
-                e -> isShulkerAABB(e.getStack())
+                mc.player.getBoundingBox().inflate(12),
+                e -> isShulkerAABB(e.getItem())
         );
 
         ItemEntity nearest = null;
         double nearestDistance = Double.MAX_VALUE;
         for (ItemEntity item : items) {
-            double distance = mc.player.squaredDistanceTo(item);
+            double distance = mc.player.distanceToSqr(item);
             if (distance < nearestDistance) {
                 nearest = item;
                 nearestDistance = distance;
@@ -1471,9 +1471,9 @@ public class ShulkerRestock extends Module {
 
 
     private void sendOffhandSwap() {
-        if (mc.player == null || mc.player.networkHandler == null) return;
-        mc.player.networkHandler.sendPacket(new ServerboundPlayerActionPacket(
-                ServerboundPlayerActionPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ORIGIN, Direction.DOWN));
+        if (mc.player == null || mc.player.connection == null) return;
+        mc.player.connection.send(new ServerboundPlayerActionPacket(
+                ServerboundPlayerActionPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ZERO, Direction.DOWN));
     }
 
 
@@ -1482,7 +1482,7 @@ public class ShulkerRestock extends Module {
 
 
     private boolean baritoneCmd(String command) {
-        if (mc.getNetworkHandler() == null) return false;
+        if (mc.getConnection() == null) return false;
         if (baritoneCmdCooldown > 0) return false;
         String prefix = prefixOverride.get();
         if (prefix == null || prefix.isEmpty()) {
@@ -1495,7 +1495,7 @@ public class ShulkerRestock extends Module {
 
 
     private void baritoneStop() {
-        if (mc.getNetworkHandler() == null) return;
+        if (mc.getConnection() == null) return;
         String prefix = prefixOverride.get();
         if (prefix == null || prefix.isEmpty()) {
             prefix = BaritoneUtils.IS_AVAILABLE ? BaritoneUtils.getPrefix() : "#";
@@ -1526,7 +1526,7 @@ public class ShulkerRestock extends Module {
 
 
     private String nameOf(Item item) {
-        return BuiltInRegistries.ITEM.getId(item).getPath();
+        return BuiltInRegistries.ITEM.getKey(item).getPath();
     }
 
 
@@ -1537,13 +1537,13 @@ public class ShulkerRestock extends Module {
 
         try {
             if (placedPos != null) {
-                Block block = mc.world.getBlockState(placedPos).getBlock();
-                if (block instanceof ShulkerAABBBlock) {
-                    return BuiltInRegistries.BLOCK.getId(block).toString();
+                Block block = mc.level.getBlockState(placedPos).getBlock();
+                if (block instanceof ShulkerBoxBlock) {
+                    return BuiltInRegistries.BLOCK.getKey(block).toString();
                 }
             }
-            if (shulkerItemPlaced instanceof BlockItem bi && bi.getBlock() instanceof ShulkerAABBBlock) {
-                return BuiltInRegistries.BLOCK.getId(bi.getBlock()).toString();
+            if (shulkerItemPlaced instanceof BlockItem bi && bi.getBlock() instanceof ShulkerBoxBlock) {
+                return BuiltInRegistries.BLOCK.getKey(bi.getBlock()).toString();
             }
         } catch (Throwable ignored) {}
 
@@ -1555,8 +1555,8 @@ public class ShulkerRestock extends Module {
 
     private String resolveShulkerBlockIdFromItem(Item item) {
         try {
-            if (item instanceof BlockItem bi && bi.getBlock() instanceof ShulkerAABBBlock) {
-                return BuiltInRegistries.BLOCK.getId(bi.getBlock()).toString();
+            if (item instanceof BlockItem bi && bi.getBlock() instanceof ShulkerBoxBlock) {
+                return BuiltInRegistries.BLOCK.getKey(bi.getBlock()).toString();
             }
         } catch (Throwable ignored) {}
         return null;

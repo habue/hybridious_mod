@@ -4,13 +4,13 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import dev.hybridious.modules.MapFilterModule;
 import meteordevelopment.meteorclient.commands.Command;
 import meteordevelopment.meteorclient.systems.modules.Modules;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.command.CommandSource;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.component.type.MapIdComponent;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientSuggestionProvider;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.level.saveddata.maps.MapId;
 
 import static com.mojang.brigadier.Command.SINGLE_SUCCESS;
 
@@ -20,7 +20,7 @@ public class MapFilterCommand extends Command {
     }
 
     @Override
-    public void build(LiteralArgumentBuilder<CommandSource> builder) {
+    public void build(LiteralArgumentBuilder<ClientSuggestionProvider> builder) {
         builder.then(literal("stats")
                         .executes(context -> {
                             MapFilterModule module = Modules.get().get(MapFilterModule.class);
@@ -87,21 +87,21 @@ public class MapFilterCommand extends Command {
     }
 
     private Integer getHeldMapId() {
-        MinecraftClient client = MinecraftClient.getInstance();
-        PlayerEntity player = client.player;
+        Minecraft client = Minecraft.getInstance();
+        Player player = client.player;
         if (player == null) return null;
 
         // Check main hand
-        ItemStack mainHand = player.getMainHandStack();
-        if (mainHand.isOf(Items.FILLED_MAP)) {
-            MapIdComponent mapId = mainHand.get(DataComponentTypes.MAP_ID);
+        ItemStack mainHand = player.getMainHandItem();
+        if (mainHand.is(Items.FILLED_MAP)) {
+            MapId mapId = mainHand.get(DataComponents.MAP_ID);
             if (mapId != null) return mapId.id();
         }
 
         // Check off hand
-        ItemStack offHand = player.getOffHandStack();
-        if (offHand.isOf(Items.FILLED_MAP)) {
-            MapIdComponent mapId = offHand.get(DataComponentTypes.MAP_ID);
+        ItemStack offHand = player.getOffhandItem();
+        if (offHand.is(Items.FILLED_MAP)) {
+            MapId mapId = offHand.get(DataComponents.MAP_ID);
             if (mapId != null) return mapId.id();
         }
 

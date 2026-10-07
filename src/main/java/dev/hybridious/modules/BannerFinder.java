@@ -140,7 +140,7 @@ public class BannerFinder extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.world == null || mc.player == null) return;
+        if (mc.level == null || mc.player == null) return;
 
         foundBanners.clear();
 
@@ -148,8 +148,8 @@ public class BannerFinder extends Module {
             soundCooldownTicks--;
         }
 
-        BlockPos playerPos = mc.player.getBlockPos();
-        int renderDistanceChunks = mc.options.getViewDistance().getValue();
+        BlockPos playerPos = mc.player.blockPosition();
+        int renderDistanceChunks = mc.options.renderDistance().get();
         int renderDistanceBlocks = renderDistanceChunks * 16;
 
         // Iterate through loaded chunks and their block entities
@@ -158,7 +158,7 @@ public class BannerFinder extends Module {
 
         for (int x = -renderDistanceChunks; x <= renderDistanceChunks; x++) {
             for (int z = -renderDistanceChunks; z <= renderDistanceChunks; z++) {
-                var chunk = mc.world.getChunk(chunkX + x, chunkZ + z);
+                var chunk = mc.level.getChunk(chunkX + x, chunkZ + z);
                 if (chunk == null) continue;
 
                 // Iterate through all block entities in the chunk
@@ -182,8 +182,8 @@ public class BannerFinder extends Module {
                     foundBanners.add(pos);
 
                     if (soundAlert.get() && !notifiedBanners.contains(pos) && soundCooldownTicks == 0) {
-                        mc.getSoundManager().play(SimpleSoundInstance.master(
-                                SoundEvents.BLOCK_NOTE_BLOCK_PLING.value(), 1.0f, 1.0f
+                        mc.getSoundManager().play(SimpleSoundInstance.forUI(
+                                SoundEvents.NOTE_BLOCK_PLING.value(), 1.0f, 1.0f
                         ));
                         notifiedBanners.add(pos);
                         soundCooldownTicks = soundCooldown.get();
@@ -197,7 +197,7 @@ public class BannerFinder extends Module {
 
     @EventHandler
     private void onRender(Render3DEvent event) {
-        if (mc.world == null || mc.player == null) return;
+        if (mc.level == null || mc.player == null) return;
 
         for (BlockPos pos : foundBanners) {
             double x = pos.getX();
@@ -206,7 +206,7 @@ public class BannerFinder extends Module {
 
             if (tracer.get()) {
                 // Get player's look vector
-                var rotationVec = mc.player.getRotationVec(1.0f);
+                var rotationVec = mc.player.getViewVector(1.0f);
                 double startX = mc.player.getX() + rotationVec.x * 0.5;
                 double startY = mc.player.getY() + mc.player.getEyeHeight(mc.player.getPose()) + rotationVec.y * 0.5;
                 double startZ = mc.player.getZ() + rotationVec.z * 0.5;
@@ -251,8 +251,8 @@ public class BannerFinder extends Module {
     public boolean addCurrentBanner() {
         if (mc.player == null) return false;
 
-        var stack = mc.player.getMainHandStack();
-        if (stack.isEmpty() || !(stack.getItem() instanceof net.minecraft.item.BannerItem)) {
+        var stack = mc.player.getMainHandItem();
+        if (stack.isEmpty() || !(stack.getItem() instanceof net.minecraft.world.item.BannerItem)) {
             return false;
         }
 
@@ -267,8 +267,8 @@ public class BannerFinder extends Module {
     public boolean removeCurrentBanner() {
         if (mc.player == null) return false;
 
-        var stack = mc.player.getMainHandStack();
-        if (stack.isEmpty() || !(stack.getItem() instanceof net.minecraft.item.BannerItem)) {
+        var stack = mc.player.getMainHandItem();
+        if (stack.isEmpty() || !(stack.getItem() instanceof net.minecraft.world.item.BannerItem)) {
             return false;
         }
 

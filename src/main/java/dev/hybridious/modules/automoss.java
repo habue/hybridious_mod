@@ -420,7 +420,7 @@ public class automoss extends Module {
 
     private void forceStopBaritone() {
         if (mc.player == null) return;
-        try { mc.player.networkHandler.sendChatMessage("#stop"); } catch (Throwable ignored) {}
+        try { mc.player.connection.sendChat("#stop"); } catch (Throwable ignored) {}
         baritoneRunning   = false;
         currentGotoTarget = null;
         sameTargetTicks   = 0;
@@ -432,22 +432,22 @@ public class automoss extends Module {
             if (mc.player == null) return;
             int useSyncId = (craftSyncId >= 0)
                     ? craftSyncId
-                    : mc.player.playerScreenHandler.syncId;
+                    : mc.player.inventoryMenu.containerId;
             // Flush grid slot 1
             try {
-                ItemStack grid = mc.player.playerScreenHandler.getSlot(CRAFT_GRID_SLOT).getStack();
+                ItemStack grid = mc.player.inventoryMenu.getSlot(CRAFT_GRID_SLOT).getItem();
                 if (!grid.isEmpty())
-                    mc.interactionManager.clickSlot(useSyncId, CRAFT_GRID_SLOT, 0,
+                    mc.gameMode.handleContainerInput(useSyncId, CRAFT_GRID_SLOT, 0,
                             ContainerInput.QUICK_MOVE, mc.player);
             } catch (Throwable ignored) {}
             // Drop cursor
             try {
-                if (!mc.player.playerScreenHandler.getCursorStack().isEmpty())
-                    mc.interactionManager.clickSlot(useSyncId, CRAFT_GRID_SLOT, 0,
+                if (!mc.player.inventoryMenu.getCarried().isEmpty())
+                    mc.gameMode.handleContainerInput(useSyncId, CRAFT_GRID_SLOT, 0,
                             ContainerInput.PICKUP, mc.player);
             } catch (Throwable ignored) {}
             // Close
-            try { mc.player.closeHandledScreen(); } catch (Throwable ignored) {}
+            try { mc.player.closeContainer(); } catch (Throwable ignored) {}
         });
         craftState           = CraftState.IDLE;
         craftTick            = 0;
@@ -522,7 +522,7 @@ public class automoss extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         tickPacketsUsed = 0;
         killAuraActiveThisTick = detectKillAura();
@@ -567,7 +567,7 @@ public class automoss extends Module {
         if (stopWhenOutOfMeal.get() && countBoneMeal() == 0 && countBoneBlocks() == 0) {
             if (baritoneRunning) stopBaritone();
             noProgressTicks = 0;
-            lastProgressPos = mc.player.getPos();
+            lastProgressPos = mc.player.position();
             return;
         }
 
@@ -605,7 +605,7 @@ public class automoss extends Module {
 
         if (delayTimer > 0) { delayTimer--; return; }
         tickCooldowns();
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
         tickBoneMeal();
     }
 
@@ -722,7 +722,7 @@ public class automoss extends Module {
 
     private void tickSameTargetGuard() {
         if (mc.player == null || currentGotoTarget == null) return;
-        if (mc.player.getBlockPos().getManhattanDistance(currentGotoTarget) <= waypointRadius.get() + 2)
+        if (mc.player.blockPosition().distManhattan(currentGotoTarget) <= waypointRadius.get() + 2)
             sameTargetTicks++;
         else sameTargetTicks = 0;
         if (sameTargetTicks >= SAME_TARGET_RETRY_TICKS) {
@@ -748,8 +748,8 @@ public class automoss extends Module {
     }
 
     private void planBoustrophedon() {
-        if (mc.player == null || mc.world == null) return;
-        BlockPos origin = mc.player.getBlockPos();
+        if (mc.player == null || mc.level == null) return;
+        BlockPos origin = mc.player.blockPosition();
         int r = scanRadius.get(), stride = Math.max(1, rowSpacing.get());
         Map<Long, CoverageCell> cells = new LinkedHashMap<>();
         BlockPos.MutableBlockPos mp = new BlockPos.MutableBlockPos();
@@ -760,9 +760,9 @@ public class automoss extends Module {
                 if (confineEnabled.get() && !insideSector(wx, wz)) continue;
                 for (int dy = 2; dy >= -maxDescend.get(); dy--) {
                     mp.set(wx, origin.getY() + dy, wz);
-                    BlockState state = mc.world.getBlockState(mp);
+                    BlockState state = mc.level.getBlockState(mp);
                     if (!isMossableBlock(state.getBlock())) continue;
-                    if (!mc.world.getBlockState(mp.up()).isAir()) continue;
+                    if (!mc.level.getBlockState(mp.above()).isAir()) continue;
                     if (mp.getY() < minY) continue;
                     if (surfaceOnly.get() && !isOutdoorSurface(mp)) continue;
                     long key = ((long) wx << 32) ^ (wz & 0xFFFFFFFFL);
@@ -814,7 +814,7 @@ public class automoss extends Module {
     private int chooseWaterSafeWaypointIndex(int preferredIndex) {
         if (!avoidWaterTravel.get() || mc.player == null || waypoints.isEmpty()) return preferredIndex;
         if (preferredIndex < 0 || preferredIndex >= waypoints.size()) return preferredIndex;
-        BlockPos from = mc.player.getBlockPos();
+        BlockPos from = mc.player.blockPosition();
         if (!routeCrossesTooMuchWater(from, standPosFor(waypoints.get(preferredIndex)))) return preferredIndex;
         int end = Math.min(waypoints.size(), preferredIndex + Math.max(4, waterSafeWaypointSearch.get()));
         int bestIndex = preferredIndex; double bestScore = Double.MAX_VALUE;
@@ -841,7 +841,7 @@ public class automoss extends Module {
     }
 
     private boolean routeCrossesTooMuchWater(BlockPos from, BlockPos to) {
-        if (mc.world == null) return false;
+        if (mc.level == null) return false;
         int maxWater = Math.max(0, maxRouteWaterColumns.get());
         int waterColumns = 0, consecutiveWater = 0;
         int steps = Math.max(Math.abs(to.getX() - from.getX()), Math.abs(to.getZ() - from.getZ()));
@@ -861,7 +861,7 @@ public class automoss extends Module {
     }
 
     private void filterToCurrentDryLandmass(Map<Long, CoverageCell> cells, BlockPos origin) {
-        if (mc.world == null || cells == null || cells.isEmpty() || origin == null) return;
+        if (mc.level == null || cells == null || cells.isEmpty() || origin == null) return;
         Set<Long> dryReachable = collectCurrentDryLandmass(origin);
         if (dryReachable.isEmpty()) return;
         int before = cells.size();
@@ -879,9 +879,9 @@ public class automoss extends Module {
                 if (confineEnabled.get() && !insideSector(wx, wz)) continue;
                 for (int dy = 2; dy >= -maxDescend.get(); dy--) {
                     mp.set(wx, origin.getY() + dy, wz);
-                    BlockState state = mc.world.getBlockState(mp);
+                    BlockState state = mc.level.getBlockState(mp);
                     if (!isMossableBlock(state.getBlock())) continue;
-                    if (!mc.world.getBlockState(mp.up()).isAir()) continue;
+                    if (!mc.level.getBlockState(mp.above()).isAir()) continue;
                     if (mp.getY() < minY) continue;
                     if (surfaceOnly.get() && !isOutdoorSurface(mp)) continue;
                     if (isVisitedWaypointArea(wx, wz)) break;
@@ -902,7 +902,7 @@ public class automoss extends Module {
         while (!queue.isEmpty()) {
             BlockPos current = queue.poll();
             for (Direction dir : new Direction[]{Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST}) {
-                int nx = current.getX() + dir.getOffsetX(), nz = current.getZ() + dir.getOffsetZ();
+                int nx = current.getX() + dir.getStepX(), nz = current.getZ() + dir.getStepZ();
                 if (Math.abs(nx - origin.getX()) > r || Math.abs(nz - origin.getZ()) > r) continue;
                 long key = columnKey(nx, nz);
                 if (visited.contains(key)) continue;
@@ -933,22 +933,22 @@ public class automoss extends Module {
     }
 
     private Integer findDryWalkableSurfaceY(int x, int z, int originY) {
-        if (mc.world == null) return null;
+        if (mc.level == null) return null;
         BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
         for (int dy = 3; dy >= -maxDescend.get() - 2; dy--) {
             p.set(x, originY + dy, z);
-            if (isDryWalkableFloor(p, mc.world.getBlockState(p))) return p.getY();
+            if (isDryWalkableFloor(p, mc.level.getBlockState(p))) return p.getY();
         }
         return null;
     }
 
     private boolean isDryWalkableFloor(BlockPos pos, BlockState floor) {
-        if (mc.world == null || floor == null) return false;
+        if (mc.level == null || floor == null) return false;
         if (floor.isAir() || !floor.getFluidState().isEmpty() || isWaterOrIce(floor)) return false;
-        BlockState feet = mc.world.getBlockState(pos.up()), head = mc.world.getBlockState(pos.up(2));
+        BlockState feet = mc.level.getBlockState(pos.above()), head = mc.level.getBlockState(pos.above(2));
         if (!feet.getFluidState().isEmpty() || !head.getFluidState().isEmpty()) return false;
         if (isWaterOrIce(feet) || isWaterOrIce(head)) return false;
-        return (feet.isAir() || feet.isReplaceable()) && (head.isAir() || head.isReplaceable());
+        return (feet.isAir() || feet.canBeReplaced()) && (head.isAir() || head.canBeReplaced());
     }
 
     private void filterToLargeMossableClusters(Map<Long, CoverageCell> cells, BlockPos origin) {
@@ -965,7 +965,7 @@ public class automoss extends Module {
             while (!queue.isEmpty()) {
                 CoverageCell current = queue.poll(); cluster.add(current);
                 for (Direction dir : new Direction[]{Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST}) {
-                    long neighborKey = columnKey(current.x() + dir.getOffsetX(), current.z() + dir.getOffsetZ());
+                    long neighborKey = columnKey(current.x() + dir.getStepX(), current.z() + dir.getStepZ());
                     CoverageCell neighbor = cells.get(neighborKey);
                     if (neighbor == null || visited.contains(neighborKey)) continue;
                     visited.add(neighborKey); queue.add(neighbor);
@@ -987,7 +987,7 @@ public class automoss extends Module {
     }
 
     private void removeWaterIceIslands(Map<Long, CoverageCell> cells) {
-        if (mc.world == null || cells == null || cells.isEmpty()) return;
+        if (mc.level == null || cells == null || cells.isEmpty()) return;
         Set<Long> visited = new HashSet<>();
         List<Long> toRemove = new ArrayList<>();
         for (CoverageCell start : cells.values()) {
@@ -999,7 +999,7 @@ public class automoss extends Module {
             while (!queue.isEmpty()) {
                 CoverageCell current = queue.poll(); cluster.add(current);
                 for (Direction dir : new Direction[]{Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST}) {
-                    long neighborKey = columnKey(current.x() + dir.getOffsetX(), current.z() + dir.getOffsetZ());
+                    long neighborKey = columnKey(current.x() + dir.getStepX(), current.z() + dir.getStepZ());
                     CoverageCell neighbor = cells.get(neighborKey);
                     if (neighbor == null || visited.contains(neighborKey)) continue;
                     visited.add(neighborKey); queue.add(neighbor);
@@ -1013,12 +1013,12 @@ public class automoss extends Module {
     }
 
     private boolean isClusterBorderMostlyWaterOrIce(List<CoverageCell> cluster, Map<Long, CoverageCell> cells) {
-        if (mc.world == null || cluster == null || cluster.isEmpty()) return false;
+        if (mc.level == null || cluster == null || cluster.isEmpty()) return false;
         int borderChecks = 0, waterIceChecks = 0;
         BlockPos.MutableBlockPos check = new BlockPos.MutableBlockPos();
         for (CoverageCell cell : cluster) {
             for (Direction dir : new Direction[]{Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST}) {
-                int nx = cell.x() + dir.getOffsetX(), nz = cell.z() + dir.getOffsetZ();
+                int nx = cell.x() + dir.getStepX(), nz = cell.z() + dir.getStepZ();
                 if (cells.containsKey(columnKey(nx, nz))) continue;
                 borderChecks++;
                 if (hasWaterOrIceNearColumn(nx, cell.y(), nz, check)) waterIceChecks++;
@@ -1029,10 +1029,10 @@ public class automoss extends Module {
     }
 
     private boolean hasWaterOrIceNearColumn(int x, int y, int z, BlockPos.MutableBlockPos check) {
-        if (mc.world == null) return false;
+        if (mc.level == null) return false;
         for (int dy = -1; dy <= 1; dy++) {
             check.set(x, y + dy, z);
-            if (isWaterOrIce(mc.world.getBlockState(check))) return true;
+            if (isWaterOrIce(mc.level.getBlockState(check))) return true;
         }
         return false;
     }
@@ -1058,7 +1058,7 @@ public class automoss extends Module {
         if (baritoneRunning && pos.equals(currentGotoTarget)) return;
         if (gotoCommandCooldown > 0) return;
         if (!tryConsumePacket(1)) return;
-        mc.player.networkHandler.sendChatMessage("#goto " + pos.getX() + " " + pos.getY() + " " + pos.getZ());
+        mc.player.connection.sendChat("#goto " + pos.getX() + " " + pos.getY() + " " + pos.getZ());
         baritoneRunning = true; currentGotoTarget = pos;
         gotoCommandCooldown = GOTO_COMMAND_COOLDOWN; sameTargetTicks = 0;
     }
@@ -1066,7 +1066,7 @@ public class automoss extends Module {
     private void stopBaritone() {
         if (!baritoneRunning || mc.player == null) return;
         if (!tryConsumePacket(1)) return;
-        mc.player.networkHandler.sendChatMessage("#stop");
+        mc.player.connection.sendChat("#stop");
         baritoneRunning = false; currentGotoTarget = null;
         gotoCommandCooldown = Math.max(gotoCommandCooldown, 2); sameTargetTicks = 0;
     }
@@ -1076,7 +1076,7 @@ public class automoss extends Module {
         boolean want = allowBreak.get();
         if (lastAllowBreakSent != null && lastAllowBreakSent == want) return;
         if (!tryConsumePacket(1)) return;
-        mc.player.networkHandler.sendChatMessage("#allowBreak " + (want ? "true" : "false"));
+        mc.player.connection.sendChat("#allowBreak " + (want ? "true" : "false"));
         lastAllowBreakSent = want;
     }
 
@@ -1088,10 +1088,10 @@ public class automoss extends Module {
         for (BlockPos pos : getCachedBoneMealTargets()) {
             if (uses >= maxUsesPerTick.get()) break;
             if (!tryConsumePacket(1)) break;
-            BlockState state = mc.world.getBlockState(pos);
+            BlockState state = mc.level.getBlockState(pos);
             boolean isMoss = state.getBlock() == mossBlockRef;
             if (isMoss && recentlyUsedMoss.containsKey(pos)) continue;
-            if (!BoneMealItem.useOnFertilizable(mc.player.getInventory().getStack(boneMealSlot), mc.world, pos)) continue;
+            if (!BoneMealItem.growCrop(mc.player.getInventory().getItem(boneMealSlot), mc.level, pos)) continue;
             FaceHit fh = pickBonemealFace(pos);
             if (fh == null) continue;
             boolean kaActive = killAuraActiveThisTick && killAuraCompat.get();
@@ -1104,9 +1104,9 @@ public class automoss extends Module {
                 double[] yp = lookAt(hitF);
                 int priority = isMoving() ? movingRotationPriority.get() : 100;
                 rotateOnce(yp[0], yp[1], priority, () -> {
-                    if (mc.player == null || mc.world == null || mc.interactionManager == null) return;
-                    if (mc.player.getInventory().getStack(slot).getItem() != Items.BONE_MEAL) return;
-                    if (!BoneMealItem.useOnFertilizable(mc.player.getInventory().getStack(slot), mc.world, posF)) return;
+                    if (mc.player == null || mc.level == null || mc.gameMode == null) return;
+                    if (mc.player.getInventory().getItem(slot).getItem() != Items.BONE_MEAL) return;
+                    if (!BoneMealItem.growCrop(mc.player.getInventory().getItem(slot), mc.level, posF)) return;
                     applyBonemeal(slot, posF, hitF, faceF);
                 });
             }
@@ -1117,18 +1117,18 @@ public class automoss extends Module {
     }
 
     private void applyBonemeal(int slot, BlockPos pos, Vec3 hitVec, Direction face) {
-        if (mc.player == null || mc.interactionManager == null) return;
+        if (mc.player == null || mc.gameMode == null) return;
         BlockHitResult hit = new BlockHitResult(hitVec, face, pos, false);
         int prev = selectHotbarSynced(slot);
-        mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, hit);
-        mc.player.swingHand(Hand.MAIN_HAND);
+        mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, hit);
+        mc.player.swing(InteractionHand.MAIN_HAND);
         restoreHotbarSynced(prev);
     }
 
     private List<BlockPos> getCachedBoneMealTargets() {
         if (mc.player == null) return cachedBoneMealTargets;
-        BlockPos origin = mc.player.getBlockPos();
-        boolean moved = lastTargetCacheOrigin == null || lastTargetCacheOrigin.getManhattanDistance(origin) > 1;
+        BlockPos origin = mc.player.blockPosition();
+        boolean moved = lastTargetCacheOrigin == null || lastTargetCacheOrigin.distManhattan(origin) > 1;
         if (!moved && boneMealTargetCacheTTL > 0) { boneMealTargetCacheTTL--; return cachedBoneMealTargets; }
         cachedBoneMealTargets = findBoneMealTargets();
         boneMealTargetCacheTTL = BONEMEAL_TTL; lastTargetCacheOrigin = origin;
@@ -1137,26 +1137,26 @@ public class automoss extends Module {
 
     private List<BlockPos> findBoneMealTargets() {
         List<BlockPos> out = new ArrayList<>();
-        if (mc.player == null || mc.world == null) return out;
+        if (mc.player == null || mc.level == null) return out;
         double rangeSq = range.get() * range.get();
-        BlockPos origin = mc.player.getBlockPos();
+        BlockPos origin = mc.player.blockPosition();
         int r = (int) Math.ceil(range.get());
         BlockPos.MutableBlockPos mp = new BlockPos.MutableBlockPos();
         for (int x = -r; x <= r; x++) {
             for (int y = -r; y <= r; y++) {
                 for (int z = -r; z <= r; z++) {
                     mp.set(origin.getX() + x, origin.getY() + y, origin.getZ() + z);
-                    if (mp.getSquaredDistance(origin) > rangeSq) continue;
-                    BlockState state = mc.world.getBlockState(mp);
+                    if (mp.distSqr(origin) > rangeSq) continue;
+                    BlockState state = mc.level.getBlockState(mp);
                     Block block = state.getBlock();
                     boolean isMoss = block == mossBlockRef;
                     if (!isMoss && makeTrees.get()) {
                         if (isInPlayerSpace(mp)) continue;
-                        String name = block.getTranslationKey();
+                        String name = block.getDescriptionId();
                         boolean isAzalea = name.contains("azalea") && !name.contains("tree");
                         boolean isSapling = name.contains("sapling");
                         if (isAzalea) {
-                            BlockPos pos = mp.toImmutable();
+                            BlockPos pos = mp.immutable();
                             if (!hasAnyVisibleFace(pos)) continue;
                             if (!azaleaCooldownMap.containsKey(pos) && (int)(Math.random() * 10) < azaleaTreeFraction.get()) {
                                 out.add(pos); azaleaCooldownMap.put(pos, azaleaCooldown.get());
@@ -1164,15 +1164,15 @@ public class automoss extends Module {
                             continue;
                         }
                         if (isSapling) {
-                            BlockPos pos = mp.toImmutable();
+                            BlockPos pos = mp.immutable();
                             if (hasAnyVisibleFace(pos)) out.add(pos);
                             continue;
                         }
                         continue;
                     }
                     if (!isMoss) continue;
-                    if (isInPlayerSpace(mp) || isInPlayerSpace(mp.up())) continue;
-                    BlockPos pos = mp.toImmutable();
+                    if (isInPlayerSpace(mp) || isInPlayerSpace(mp.above())) continue;
+                    BlockPos pos = mp.immutable();
                     if (!hasValidNeighbor(pos)) continue;
                     if (!hasSkyAccess(pos)) continue;
                     if (bonemealSideFaces.get()) {
@@ -1190,13 +1190,13 @@ public class automoss extends Module {
     private record SeedPlace(BlockPos support, Vec3 hit, Direction dir, double distanceSq, boolean dry) {}
 
     private FaceHit pickBonemealFace(BlockPos pos) {
-        if (mc.player == null || mc.world == null) return null;
-        Vec3 eye = mc.player.getEyePos();
+        if (mc.player == null || mc.level == null) return null;
+        Vec3 eye = mc.player.getEyePosition();
         double maxReachSq = Math.min(range.get(), 4.4) * Math.min(range.get(), 4.4);
         Direction[] faces = bonemealSideFaces.get() ? Direction.values() : new Direction[]{Direction.UP};
         FaceHit best = null; double bestDSq = Double.MAX_VALUE;
         for (Direction dir : faces) {
-            Vec3 fc = faceCenter(pos, dir); double dSq = eye.squaredDistanceTo(fc);
+            Vec3 fc = faceCenter(pos, dir); double dSq = eye.distanceToSqr(fc);
             if (dSq > maxReachSq) continue;
             if (!faceVisible(pos, dir, fc, eye)) continue;
             if (dSq < bestDSq) { bestDSq = dSq; best = new FaceHit(fc, dir); }
@@ -1205,36 +1205,36 @@ public class automoss extends Module {
     }
 
     private Vec3 faceCenter(BlockPos pos, Direction dir) {
-        return new Vec3(pos.getX() + 0.5 + dir.getOffsetX() * 0.5,
-                pos.getY() + 0.5 + dir.getOffsetY() * 0.5,
-                pos.getZ() + 0.5 + dir.getOffsetZ() * 0.5);
+        return new Vec3(pos.getX() + 0.5 + dir.getStepX() * 0.5,
+                pos.getY() + 0.5 + dir.getStepY() * 0.5,
+                pos.getZ() + 0.5 + dir.getStepZ() * 0.5);
     }
 
     private boolean faceVisible(BlockPos pos, Direction dir, Vec3 fc, Vec3 eye) {
-        if (mc.world == null) return false;
-        BlockPos neighbor = pos.offset(dir);
-        BlockState ns = mc.world.getBlockState(neighbor);
+        if (mc.level == null) return false;
+        BlockPos neighbor = pos.relative(dir);
+        BlockState ns = mc.level.getBlockState(neighbor);
         if (!ns.isAir() && ns.getFluidState().isEmpty()) {
-            var shape = ns.getCollisionShape(mc.world, neighbor);
+            var shape = ns.getCollisionShape(mc.level, neighbor);
             if (!shape.isEmpty()) {
-                var bb = shape.getBoundingBox();
+                var bb = shape.bounds();
                 if ((bb.maxX - bb.minX) >= 0.999 && (bb.maxY - bb.minY) >= 0.999
-                        && (bb.maxZ - bb.minZ) >= 0.999 && ns.isOpaque()) return false;
+                        && (bb.maxZ - bb.minZ) >= 0.999 && ns.isSolidRender()) return false;
             }
         }
-        ClipContext ctx = new ClipContext(eye, fc, ClipContext.ShapeType.COLLIDER,
-                ClipContext.FluidHandling.NONE, mc.player);
-        BlockPos hitPos = mc.world.raycast(ctx).getBlockPos();
+        ClipContext ctx = new ClipContext(eye, fc, ClipContext.Block.COLLIDER,
+                ClipContext.Fluid.NONE, mc.player);
+        BlockPos hitPos = mc.level.clip(ctx).getBlockPos();
         return hitPos.equals(pos) || hitPos.equals(neighbor);
     }
 
     private boolean hasAnyVisibleFace(BlockPos pos) {
-        if (mc.player == null || mc.world == null) return false;
-        Vec3 eye = mc.player.getEyePos();
+        if (mc.player == null || mc.level == null) return false;
+        Vec3 eye = mc.player.getEyePosition();
         double maxRSq = Math.min(range.get(), 4.4) * Math.min(range.get(), 4.4);
         for (Direction dir : Direction.values()) {
             Vec3 fc = faceCenter(pos, dir);
-            if (eye.squaredDistanceTo(fc) > maxRSq) continue;
+            if (eye.distanceToSqr(fc) > maxRSq) continue;
             if (faceVisible(pos, dir, fc, eye)) return true;
         }
         return false;
@@ -1242,14 +1242,14 @@ public class automoss extends Module {
 
     private boolean hasLineOfSight(BlockPos pos) {
         Vec3 center = new Vec3(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
-        ClipContext ctx = new ClipContext(mc.player.getEyePos(), center,
-                ClipContext.ShapeType.COLLIDER, ClipContext.FluidHandling.NONE, mc.player);
-        return mc.world.raycast(ctx).getBlockPos().equals(pos);
+        ClipContext ctx = new ClipContext(mc.player.getEyePosition(), center,
+                ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player);
+        return mc.level.clip(ctx).getBlockPos().equals(pos);
     }
 
     private boolean hasValidNeighbor(BlockPos pos) {
         for (Direction dir : Direction.values()) {
-            String n = mc.world.getBlockState(pos.offset(dir)).getBlock().getTranslationKey();
+            String n = mc.level.getBlockState(pos.relative(dir)).getBlock().getDescriptionId();
             if (n.contains("azalea") || n.contains("tall_grass")
                     || (n.contains("grass") && !n.contains("block"))
                     || n.contains("moss_block") || n.contains("moss_carpet")) continue;
@@ -1259,9 +1259,9 @@ public class automoss extends Module {
     }
 
     private boolean isObstructedAbove(BlockPos pos) {
-        BlockState above = mc.world.getBlockState(pos.up());
+        BlockState above = mc.level.getBlockState(pos.above());
         if (!above.getFluidState().isEmpty()) return true;
-        String n = above.getBlock().getTranslationKey();
+        String n = above.getBlock().getDescriptionId();
         return n.contains("torch") || n.contains("lantern") || n.contains("sign")
                 || n.contains("lava") || n.contains("water");
     }
@@ -1270,10 +1270,10 @@ public class automoss extends Module {
         if (!requireSkyAccess.get()) return true;
         int depth = skyAccessDepth.get();
         for (int dy = 1; dy <= depth; dy++) {
-            BlockState state = mc.world.getBlockState(pos.up(dy));
+            BlockState state = mc.level.getBlockState(pos.above(dy));
             if (state.isAir()) continue;
             if (!state.getFluidState().isEmpty()) return false;
-            String n = state.getBlock().getTranslationKey();
+            String n = state.getBlock().getDescriptionId();
             boolean passable = n.contains("grass") || n.contains("fern") || n.contains("flower")
                     || n.contains("azalea") || n.contains("moss_carpet") || n.contains("sapling") || n.contains("vine");
             if (passable) continue;
@@ -1283,14 +1283,14 @@ public class automoss extends Module {
     }
 
     private boolean isOutdoorSurface(BlockPos pos) {
-        if (mc.world == null) return false;
-        if (mc.world.isSkyVisible(pos.up())) return true;
-        if (mc.world.getLightLevel(LightLayer.SKY, pos.up()) >= 12) return true;
+        if (mc.level == null) return false;
+        if (mc.level.canSeeSky(pos.above())) return true;
+        if (mc.level.getBrightness(LightLayer.SKY, pos.above()) >= 12) return true;
         for (int dy = 1; dy <= 16; dy++) {
-            BlockState st = mc.world.getBlockState(pos.up(dy));
+            BlockState st = mc.level.getBlockState(pos.above(dy));
             if (st.isAir()) continue;
             if (!st.getFluidState().isEmpty()) continue;
-            String n = st.getBlock().getTranslationKey();
+            String n = st.getBlock().getDescriptionId();
             boolean passable = n.contains("grass") || n.contains("fern") || n.contains("flower")
                     || n.contains("vine") || n.contains("sapling") || n.contains("moss_carpet")
                     || n.contains("snow") || n.contains("leaves");
@@ -1302,9 +1302,9 @@ public class automoss extends Module {
 
     private void tickStallCheck() {
         if (mc.player == null) return;
-        if (touchingWater()) { lastProgressPos = mc.player.getPos(); noProgressTicks = 0; return; }
-        if (killAuraActiveThisTick && killAuraCompat.get()) { lastProgressPos = mc.player.getPos(); noProgressTicks = 0; return; }
-        Vec3 now = mc.player.getPos();
+        if (touchingWater()) { lastProgressPos = mc.player.position(); noProgressTicks = 0; return; }
+        if (killAuraActiveThisTick && killAuraCompat.get()) { lastProgressPos = mc.player.position(); noProgressTicks = 0; return; }
+        Vec3 now = mc.player.position();
         if (lastProgressPos == null) { lastProgressPos = now; return; }
         double moved = now.distanceTo(lastProgressPos);
         boolean madeProgress = moved >= stuckThreshold.get() || (System.currentTimeMillis() - lastBonemealMillis) < 2000L;
@@ -1312,7 +1312,7 @@ public class automoss extends Module {
         else { noProgressTicks++; }
         if (noProgressTicks >= stuckTicks.get()) {
             if (hasPlayerSpaceObstruction() && clearPlayerSpaceObstruction()) {
-                noProgressTicks = 0; lastProgressPos = mc.player.getPos(); return;
+                noProgressTicks = 0; lastProgressPos = mc.player.position(); return;
             }
             stopBaritone(); noProgressTicks = 0; lastProgressPos = null;
             if (patternState == PatternState.EXECUTING) {
@@ -1324,16 +1324,16 @@ public class automoss extends Module {
     }
 
     private boolean isMossInRange() {
-        if (mc.player == null || mc.world == null) return false;
+        if (mc.player == null || mc.level == null) return false;
         if (mossInRangeCacheTTL > 0) { mossInRangeCacheTTL--; return cachedMossInRange; }
         mossInRangeCacheTTL = MOSS_RANGE_TTL;
-        double rSq = range.get() * range.get(); BlockPos origin = mc.player.getBlockPos();
+        double rSq = range.get() * range.get(); BlockPos origin = mc.player.blockPosition();
         int r = (int) Math.ceil(range.get());
         BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
         for (int x = -r; x <= r; x++) for (int y = -r; y <= r; y++) for (int z = -r; z <= r; z++) {
             p.set(origin.getX() + x, origin.getY() + y, origin.getZ() + z);
-            if (p.getSquaredDistance(origin) > rSq) continue;
-            if (mc.world.getBlockState(p).getBlock() == mossBlockRef) { cachedMossInRange = true; return true; }
+            if (p.distSqr(origin) > rSq) continue;
+            if (mc.level.getBlockState(p).getBlock() == mossBlockRef) { cachedMossInRange = true; return true; }
         }
         cachedMossInRange = false; return false;
     }
@@ -1345,16 +1345,16 @@ public class automoss extends Module {
     }
 
     private boolean hasReachableMossToBonemeal() {
-        if (mc.player == null || mc.world == null) return false;
+        if (mc.player == null || mc.level == null) return false;
         for (BlockPos pos : getCachedBoneMealTargets()) {
-            if (mc.world.getBlockState(pos).getBlock() == mossBlockRef) return true;
+            if (mc.level.getBlockState(pos).getBlock() == mossBlockRef) return true;
         }
         return false;
     }
 
     private void tickPendingSeedPlacement() {
-        if (pendingSeedPlaceAt == null || mc.world == null) return;
-        if (mc.world.getBlockState(pendingSeedPlaceAt).getBlock() == mossBlockRef) {
+        if (pendingSeedPlaceAt == null || mc.level == null) return;
+        if (mc.level.getBlockState(pendingSeedPlaceAt).getBlock() == mossBlockRef) {
             pendingSeedPlaceAt = null; pendingSeedVerifyTicks = 0;
             placeMossTimer = Math.max(placeMossTimer, placeMossDelay.get());
             boneMealTargetCacheTTL = 0; mossInRangeCacheTTL = 0; return;
@@ -1367,7 +1367,7 @@ public class automoss extends Module {
     }
 
     private void trySeedMoss() {
-        if (mc.player == null || mc.world == null || mc.interactionManager == null) return;
+        if (mc.player == null || mc.level == null || mc.gameMode == null) return;
         if (placeMossTimer > 0 || pendingSeedPlaceAt != null) return;
         if (onlySeedWhenNoReachableMoss.get() && hasReachableMossToBonemeal()) return;
         if (tickPacketsUsed + 3 > packetBudget.get()) return;
@@ -1375,22 +1375,22 @@ public class automoss extends Module {
         if (mossSlot < 0 || mossSlot >= 9) return;
         SeedPlace seed = findBestSeedPlacement();
         if (seed == null) { placeMossTimer = Math.max(1, placeMossRetryDelay.get()); return; }
-        final BlockPos supportF = seed.support(), placeAtF = supportF.offset(seed.dir());
+        final BlockPos supportF = seed.support(), placeAtF = supportF.relative(seed.dir());
         final Vec3 hitF = seed.hit(); final Direction faceF = seed.dir(); final int slotF = mossSlot;
         double[] yp = lookAt(hitF);
         int priority = isMoving() ? movingRotationPriority.get() : 100;
         placeMossTimer = Math.max(1, placeMossRetryDelay.get());
         rotateOnce(yp[0], yp[1], priority, true, () -> {
-            if (mc.player == null || mc.world == null || mc.interactionManager == null) return;
-            if (mc.player.getInventory().getStack(slotF).getItem() != Items.MOSS_BLOCK) return;
+            if (mc.player == null || mc.level == null || mc.gameMode == null) return;
+            if (mc.player.getInventory().getItem(slotF).getItem() != Items.MOSS_BLOCK) return;
             if (!isReliableSeedSupport(supportF)) return;
-            if (!canPlaceSeedAt(placeAtF, mc.player.getBlockPos())) return;
+            if (!canPlaceSeedAt(placeAtF, mc.player.blockPosition())) return;
             if (ignoreWaterIceIslands.get() && isLocalWaterIceIsland(supportF)) return;
             int prev = selectHotbarSynced(slotF);
             if (!tryConsumePacket(1)) { restoreHotbarSynced(prev); return; }
-            mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND,
+            mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND,
                     new BlockHitResult(hitF, faceF, supportF, false));
-            mc.player.swingHand(Hand.MAIN_HAND); restoreHotbarSynced(prev);
+            mc.player.swing(InteractionHand.MAIN_HAND); restoreHotbarSynced(prev);
             pendingSeedPlaceAt = placeAtF; pendingSeedVerifyTicks = Math.max(1, placeMossVerifyTicks.get());
             boneMealTargetCacheTTL = 0; mossInRangeCacheTTL = 0;
         });
@@ -1402,8 +1402,8 @@ public class automoss extends Module {
     }
 
     private SeedPlace findBestSeedPlacementPass(boolean enforceLargeAreaMinimum) {
-        if (mc.player == null || mc.world == null) return null;
-        Vec3 eye = mc.player.getEyePos(); BlockPos feet = mc.player.getBlockPos();
+        if (mc.player == null || mc.level == null) return null;
+        Vec3 eye = mc.player.getEyePosition(); BlockPos feet = mc.player.blockPosition();
         double maxReach = Math.min(range.get(), 4.35), maxReachSq = maxReach * maxReach;
         SeedPlace best = null; double bestScore = Double.MAX_VALUE;
         int horizontal = Math.max(3, Math.min(5, (int) Math.ceil(range.get())));
@@ -1412,8 +1412,8 @@ public class automoss extends Module {
             for (int x = -horizontal; x <= horizontal; x++) {
                 for (int z = -horizontal; z <= horizontal; z++) {
                     support.set(feet.getX() + x, feet.getY() + y, feet.getZ() + z);
-                    if (support.getSquaredDistance(feet) > maxReachSq + 4.0) continue;
-                    BlockPos supportPos = support.toImmutable();
+                    if (support.distSqr(feet) > maxReachSq + 4.0) continue;
+                    BlockPos supportPos = support.immutable();
                     if (!isReliableSeedSupport(supportPos)) continue;
                     if (ignoreWaterIceIslands.get() && isLocalWaterIceIsland(supportPos)) continue;
                     int areaScore = scoreNearbyMossableSeedArea(supportPos);
@@ -1422,7 +1422,7 @@ public class automoss extends Module {
                     SeedPlace candidate = raycastSeedPlacement(supportPos, eye, feet, maxReachSq);
                     if (candidate == null) continue;
                     double score = candidate.distanceSq();
-                    if (supportPos.equals(feet.down())) score -= 4.0;
+                    if (supportPos.equals(feet.below())) score -= 4.0;
                     if (supportPos.getY() == feet.getY() - 1) score -= 1.5;
                     if (preferLargeSeedAreas.get()) score -= Math.min(36.0, areaScore * 1.1);
                     if (score < bestScore) { best = candidate; bestScore = score; }
@@ -1433,7 +1433,7 @@ public class automoss extends Module {
     }
 
     private int scoreNearbyMossableSeedArea(BlockPos center) {
-        if (mc.world == null || center == null) return 0;
+        if (mc.level == null || center == null) return 0;
         int radius = Math.max(2, seedAreaScanRadius.get()), score = 0;
         BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
         for (int dx = -radius; dx <= radius; dx++) {
@@ -1442,12 +1442,12 @@ public class automoss extends Module {
                 if (distanceSq > radius * radius) continue;
                 for (int dy = 1; dy >= -2; dy--) {
                     p.set(center.getX() + dx, center.getY() + dy, center.getZ() + dz);
-                    BlockState floor = mc.world.getBlockState(p);
+                    BlockState floor = mc.level.getBlockState(p);
                     if (!isMossableBlock(floor.getBlock())) continue;
                     if (!floor.getFluidState().isEmpty() || isWaterOrIce(floor)) continue;
-                    BlockState above = mc.world.getBlockState(p.up());
+                    BlockState above = mc.level.getBlockState(p.above());
                     if (!above.getFluidState().isEmpty() || isWaterOrIce(above)) continue;
-                    if (!above.isAir() && !above.isReplaceable()) continue;
+                    if (!above.isAir() && !above.canBeReplaced()) continue;
                     score += distanceSq <= 4 ? 3 : 1; break;
                 }
             }
@@ -1456,27 +1456,27 @@ public class automoss extends Module {
     }
 
     private SeedPlace raycastSeedPlacement(BlockPos support, Vec3 eye, BlockPos feet, double maxReachSq) {
-        BlockPos placeAt = support.up(); Vec3 aim = insetFaceHit(support, Direction.UP, eye);
-        double distSq = eye.squaredDistanceTo(aim);
+        BlockPos placeAt = support.above(); Vec3 aim = insetFaceHit(support, Direction.UP, eye);
+        double distSq = eye.distanceToSqr(aim);
         if (distSq > maxReachSq) return null;
         if (!canPlaceSeedAt(placeAt, feet)) return null;
-        ClipContext ctx = new ClipContext(eye, aim, ClipContext.ShapeType.OUTLINE,
-                ClipContext.FluidHandling.NONE, mc.player);
-        BlockHitResult hit = mc.world.raycast(ctx);
-        if (hit.getBlockPos().equals(support) && hit.getSide() == Direction.UP)
-            return new SeedPlace(support, hit.getPos(), Direction.UP, distSq, true);
+        ClipContext ctx = new ClipContext(eye, aim, ClipContext.Block.OUTLINE,
+                ClipContext.Fluid.NONE, mc.player);
+        BlockHitResult hit = mc.level.clip(ctx);
+        if (hit.getBlockPos().equals(support) && hit.getDirection() == Direction.UP)
+            return new SeedPlace(support, hit.getLocation(), Direction.UP, distSq, true);
         if (hit.getBlockPos().equals(placeAt)) {
-            BlockState hitState = mc.world.getBlockState(placeAt);
-            if (hitState.isReplaceable() && hitState.getFluidState().isEmpty())
+            BlockState hitState = mc.level.getBlockState(placeAt);
+            if (hitState.canBeReplaced() && hitState.getFluidState().isEmpty())
                 return new SeedPlace(support, aim, Direction.UP, distSq, true);
         }
         return null;
     }
 
     private Vec3 insetFaceHit(BlockPos pos, Direction dir, Vec3 eye) {
-        double x = pos.getX() + 0.5 + dir.getOffsetX() * 0.5;
-        double y = pos.getY() + 0.5 + dir.getOffsetY() * 0.5;
-        double z = pos.getZ() + 0.5 + dir.getOffsetZ() * 0.5;
+        double x = pos.getX() + 0.5 + dir.getStepX() * 0.5;
+        double y = pos.getY() + 0.5 + dir.getStepY() * 0.5;
+        double z = pos.getZ() + 0.5 + dir.getStepZ() * 0.5;
         if (dir.getAxis() != Direction.Axis.X) {
             double cx = pos.getX() + 0.5;
             x = Math.max(pos.getX() + 0.18, Math.min(pos.getX() + 0.82, cx + Math.signum(eye.x - cx) * 0.22));
@@ -1493,14 +1493,14 @@ public class automoss extends Module {
     }
 
     private boolean isReliableSeedSupport(BlockPos pos) {
-        if (mc.world == null || pos == null) return false;
-        BlockState state = mc.world.getBlockState(pos);
+        if (mc.level == null || pos == null) return false;
+        BlockState state = mc.level.getBlockState(pos);
         if (!isNaturalSeedSupportBlock(state.getBlock())) return false;
         if (!state.getFluidState().isEmpty() || isWaterOrIce(state)) return false;
-        if (!state.isSolidBlock(mc.world, pos) && state.getCollisionShape(mc.world, pos).isEmpty()) return false;
-        BlockState above = mc.world.getBlockState(pos.up());
+        if (!state.isRedstoneConductor(mc.level, pos) && state.getCollisionShape(mc.level, pos).isEmpty()) return false;
+        BlockState above = mc.level.getBlockState(pos.above());
         if (!above.getFluidState().isEmpty() || isWaterOrIce(above)) return false;
-        if (!above.isAir() && !above.isReplaceable()) return false;
+        if (!above.isAir() && !above.canBeReplaced()) return false;
         return isDrySeedColumn(pos);
     }
 
@@ -1512,37 +1512,37 @@ public class automoss extends Module {
     }
 
     private boolean canPlaceSeedAt(BlockPos placeAt, BlockPos feet) {
-        if (mc.world == null || placeAt == null) return false;
-        if (placeAt.equals(feet) || placeAt.equals(feet.up())) return false;
-        if (isInPlayerSpace(placeAt) || isInPlayerSpace(placeAt.up())) return false;
-        BlockState at = mc.world.getBlockState(placeAt);
+        if (mc.level == null || placeAt == null) return false;
+        if (placeAt.equals(feet) || placeAt.equals(feet.above())) return false;
+        if (isInPlayerSpace(placeAt) || isInPlayerSpace(placeAt.above())) return false;
+        BlockState at = mc.level.getBlockState(placeAt);
         if (!at.getFluidState().isEmpty() || isWaterOrIce(at)) return false;
-        if (!at.isAir() && !at.isReplaceable()) return false;
-        return isReliableSeedSupport(placeAt.down());
+        if (!at.isAir() && !at.canBeReplaced()) return false;
+        return isReliableSeedSupport(placeAt.below());
     }
 
     private boolean isDrySeedColumn(BlockPos support) {
-        if (mc.world == null || support == null) return false;
-        BlockPos placeAt = support.up();
-        for (Direction dir : Direction.Type.HORIZONTAL) {
-            BlockState state = mc.world.getBlockState(placeAt.offset(dir));
+        if (mc.level == null || support == null) return false;
+        BlockPos placeAt = support.above();
+        for (Direction dir : Direction.Plane.HORIZONTAL) {
+            BlockState state = mc.level.getBlockState(placeAt.relative(dir));
             if (!state.getFluidState().isEmpty() || isWaterOrIce(state)) return false;
         }
         for (int dy = 1; dy <= 2; dy++) {
-            BlockState above = mc.world.getBlockState(placeAt.up(dy));
+            BlockState above = mc.level.getBlockState(placeAt.above(dy));
             if (!above.getFluidState().isEmpty() || isWaterOrIce(above)) return false;
         }
         return true;
     }
 
     private boolean isLocalWaterIceIsland(BlockPos center) {
-        if (mc.world == null || center == null) return false;
+        if (mc.level == null || center == null) return false;
         int connectedMossable = 0, borderChecks = 0, waterIceChecks = 0, radius = 2;
         BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
         for (int dx = -radius; dx <= radius; dx++) {
             for (int dz = -radius; dz <= radius; dz++) {
                 p.set(center.getX() + dx, center.getY(), center.getZ() + dz);
-                if (isMossableBlock(mc.world.getBlockState(p).getBlock())) { connectedMossable++; continue; }
+                if (isMossableBlock(mc.level.getBlockState(p).getBlock())) { connectedMossable++; continue; }
                 if (Math.abs(dx) == radius || Math.abs(dz) == radius) {
                     borderChecks++;
                     if (hasWaterOrIceNearColumn(p.getX(), center.getY(), p.getZ(), p)) waterIceChecks++;
@@ -1571,15 +1571,15 @@ public class automoss extends Module {
         if (mc.player == null) return 0;
         int partial = 0, emptySlots = 0;
         for (int i = 0; i < 36; i++) {
-            ItemStack stack = mc.player.getInventory().getStack(i);
+            ItemStack stack = mc.player.getInventory().getItem(i);
             if (stack.isEmpty()) {
                 emptySlots++;
-            } else if (stack.getItem() == Items.BONE_MEAL && stack.getCount() < stack.getMaxCount()) {
-                partial += stack.getMaxCount() - stack.getCount();
+            } else if (stack.getItem() == Items.BONE_MEAL && stack.getCount() < stack.getMaxStackSize()) {
+                partial += stack.getMaxStackSize() - stack.getCount();
             }
         }
         int usableEmpty = Math.max(0, emptySlots - 1);
-        return partial + usableEmpty * Items.BONE_MEAL.getMaxCount();
+        return partial + usableEmpty * new ItemStack(Items.BONE_MEAL).getMaxStackSize();
     }
 
 
@@ -1587,7 +1587,7 @@ public class automoss extends Module {
         if (mc.player == null) return false;
         int empty = 0;
         for (int i = 0; i < 36; i++) {
-            if (mc.player.getInventory().getStack(i).isEmpty()) empty++;
+            if (mc.player.getInventory().getItem(i).isEmpty()) empty++;
         }
 
         return empty >= 1;
@@ -1614,7 +1614,7 @@ public class automoss extends Module {
                 || craftState == CraftState.STOCK
                 || craftState == CraftState.CLOSE) {
 
-            if (!(mc.currentScreen instanceof InventoryScreen)) {
+            if (!(mc.screen instanceof InventoryScreen)) {
                 craftScreenStable    = 0;
                 craftOpenScheduled   = false;
                 craftState           = CraftState.OPEN;
@@ -1623,7 +1623,7 @@ public class automoss extends Module {
                 return;
             }
 
-            int liveSyncId = mc.player.playerScreenHandler.syncId;
+            int liveSyncId = mc.player.inventoryMenu.containerId;
             if (craftSyncId >= 0 && liveSyncId != craftSyncId) {
                 craftSyncId       = -1;
                 craftScreenStable = 0;
@@ -1643,7 +1643,7 @@ public class automoss extends Module {
                     craftOpenScheduled = true;
                     mc.execute(() -> {
                         if (mc.player == null) return;
-                        if (!(mc.currentScreen instanceof InventoryScreen))
+                        if (!(mc.screen instanceof InventoryScreen))
                             mc.setScreen(new InventoryScreen(mc.player));
                     });
                 }
@@ -1655,11 +1655,11 @@ public class automoss extends Module {
 
 
             case WAIT_OPEN -> {
-                if (!(mc.currentScreen instanceof InventoryScreen)) {
+                if (!(mc.screen instanceof InventoryScreen)) {
                     if (craftTick % 4 == 0) {
                         mc.execute(() -> {
                             if (mc.player == null) return;
-                            if (!(mc.currentScreen instanceof InventoryScreen))
+                            if (!(mc.screen instanceof InventoryScreen))
                                 mc.setScreen(new InventoryScreen(mc.player));
                         });
                     }
@@ -1669,7 +1669,7 @@ public class automoss extends Module {
                 craftScreenStable++;
                 if (craftScreenStable < SCREEN_STABLE_TICKS) return;
 
-                craftSyncId       = mc.player.playerScreenHandler.syncId;
+                craftSyncId       = mc.player.inventoryMenu.containerId;
                 craftScreenStable = 0;
                 craftState        = CraftState.PLACE_ONE;
                 craftTick         = 0;
@@ -1702,17 +1702,17 @@ public class automoss extends Module {
                 final int ssrc  = srcSlot;
 
                 mc.execute(() -> {
-                    if (mc.player == null || mc.interactionManager == null) return;
+                    if (mc.player == null || mc.gameMode == null) return;
 
-                    if (!mc.player.playerScreenHandler.getCursorStack().isEmpty()) {
-                        mc.interactionManager.clickSlot(sid, ssrc, 0,
+                    if (!mc.player.inventoryMenu.getCarried().isEmpty()) {
+                        mc.gameMode.handleContainerInput(sid, ssrc, 0,
                                 ContainerInput.PICKUP, mc.player);
                     }
 
-                    mc.interactionManager.clickSlot(sid, ssrc, 1,
+                    mc.gameMode.handleContainerInput(sid, ssrc, 1,
                             ContainerInput.PICKUP, mc.player);
 
-                    mc.interactionManager.clickSlot(sid, CRAFT_GRID_SLOT, 0,
+                    mc.gameMode.handleContainerInput(sid, CRAFT_GRID_SLOT, 0,
                             ContainerInput.PICKUP, mc.player);
                 });
 
@@ -1727,20 +1727,20 @@ public class automoss extends Module {
                 final int sid = craftSyncId;
 
                 mc.execute(() -> {
-                    if (mc.player == null || mc.interactionManager == null) return;
-                    ItemStack output = mc.player.playerScreenHandler.getSlot(CRAFT_OUTPUT_SLOT).getStack();
+                    if (mc.player == null || mc.gameMode == null) return;
+                    ItemStack output = mc.player.inventoryMenu.getSlot(CRAFT_OUTPUT_SLOT).getItem();
                     if (!output.isEmpty()) {
-                        mc.interactionManager.clickSlot(sid, CRAFT_OUTPUT_SLOT, 0,
+                        mc.gameMode.handleContainerInput(sid, CRAFT_OUTPUT_SLOT, 0,
                                 ContainerInput.QUICK_MOVE, mc.player);
                     }
-                    ItemStack grid = mc.player.playerScreenHandler.getSlot(CRAFT_GRID_SLOT).getStack();
+                    ItemStack grid = mc.player.inventoryMenu.getSlot(CRAFT_GRID_SLOT).getItem();
                     if (!grid.isEmpty()) {
-                        mc.interactionManager.clickSlot(sid, CRAFT_GRID_SLOT, 0,
+                        mc.gameMode.handleContainerInput(sid, CRAFT_GRID_SLOT, 0,
                                 ContainerInput.QUICK_MOVE, mc.player);
                     }
-                    if (!mc.player.playerScreenHandler.getCursorStack().isEmpty()) {
+                    if (!mc.player.inventoryMenu.getCarried().isEmpty()) {
                         int dropBack = (craftSrcSlot >= 0) ? craftSrcSlot : INV_FIRST;
-                        mc.interactionManager.clickSlot(sid, dropBack, 0,
+                        mc.gameMode.handleContainerInput(sid, dropBack, 0,
                                 ContainerInput.PICKUP, mc.player);
                     }
                 });
@@ -1766,20 +1766,20 @@ public class automoss extends Module {
                 final int targetSlot  = HOTBAR_FIRST_HANDLER + 8; // hotbar slot 9
 
                 mc.execute(() -> {
-                    if (mc.player == null || mc.interactionManager == null) return;
-                    ItemStack inTarget = mc.player.playerScreenHandler.getSlot(targetSlot).getStack();
+                    if (mc.player == null || mc.gameMode == null) return;
+                    ItemStack inTarget = mc.player.inventoryMenu.getSlot(targetSlot).getItem();
                     if (inTarget.getItem() == Items.BONE_MEAL) return; // already has bone meal
                     int bestSrc = -1, bestCount = 0;
                     for (int s = INV_FIRST; s <= INV_LAST; s++) {
                         if (s == targetSlot) continue;
-                        ItemStack st = mc.player.playerScreenHandler.getSlot(s).getStack();
+                        ItemStack st = mc.player.inventoryMenu.getSlot(s).getItem();
                         if (st.getItem() == Items.BONE_MEAL && st.getCount() > bestCount) {
                             bestCount = st.getCount(); bestSrc = s;
                         }
                     }
                     if (bestSrc == -1) return;
                     int hotbarButton = targetSlot - HOTBAR_FIRST_HANDLER;
-                    mc.interactionManager.clickSlot(sid, bestSrc, hotbarButton,
+                    mc.gameMode.handleContainerInput(sid, bestSrc, hotbarButton,
                             ContainerInput.SWAP, mc.player);
                 });
 
@@ -1794,20 +1794,20 @@ public class automoss extends Module {
                 final int sid = craftSyncId;
 
                 mc.execute(() -> {
-                    if (mc.player == null || mc.interactionManager == null) return;
-                    ItemStack out = mc.player.playerScreenHandler.getSlot(CRAFT_OUTPUT_SLOT).getStack();
+                    if (mc.player == null || mc.gameMode == null) return;
+                    ItemStack out = mc.player.inventoryMenu.getSlot(CRAFT_OUTPUT_SLOT).getItem();
                     if (!out.isEmpty())
-                        mc.interactionManager.clickSlot(sid, CRAFT_OUTPUT_SLOT, 0,
+                        mc.gameMode.handleContainerInput(sid, CRAFT_OUTPUT_SLOT, 0,
                                 ContainerInput.QUICK_MOVE, mc.player);
-                    ItemStack grid = mc.player.playerScreenHandler.getSlot(CRAFT_GRID_SLOT).getStack();
+                    ItemStack grid = mc.player.inventoryMenu.getSlot(CRAFT_GRID_SLOT).getItem();
                     if (!grid.isEmpty())
-                        mc.interactionManager.clickSlot(sid, CRAFT_GRID_SLOT, 0,
+                        mc.gameMode.handleContainerInput(sid, CRAFT_GRID_SLOT, 0,
                                 ContainerInput.QUICK_MOVE, mc.player);
-                    if (!mc.player.playerScreenHandler.getCursorStack().isEmpty()) {
-                        mc.interactionManager.clickSlot(sid, INV_FIRST, 0,
+                    if (!mc.player.inventoryMenu.getCarried().isEmpty()) {
+                        mc.gameMode.handleContainerInput(sid, INV_FIRST, 0,
                                 ContainerInput.PICKUP, mc.player);
                     }
-                    mc.player.closeHandledScreen();
+                    mc.player.closeContainer();
                 });
 
                 craftState           = CraftState.IDLE;
@@ -1842,7 +1842,7 @@ public class automoss extends Module {
     private boolean hasBoneBlocksInInventoryShulkers() {
         if (mc.player == null) return false;
         for (int i = 0; i < 36; i++) {
-            ItemStack stack = mc.player.getInventory().getStack(i);
+            ItemStack stack = mc.player.getInventory().getItem(i);
             if (!isShulkerBoxStack(stack)) continue;
             if (shulkerContainsBoneBlocks(stack)) return true;
         }
@@ -1856,8 +1856,8 @@ public class automoss extends Module {
 
     private boolean shulkerContainsBoneBlocks(ItemStack shulkerStack) {
         ItemContainerContents container = shulkerStack.getOrDefault(
-                DataComponents.CONTAINER, ItemContainerContents.DEFAULT);
-        return container.streamNonEmpty().anyMatch(stack -> stack.getItem() == Items.BONE_BLOCK);
+                DataComponents.CONTAINER, ItemContainerContents.EMPTY);
+        return container.nonEmptyItemCopyStream().anyMatch(stack -> stack.getItem() == Items.BONE_BLOCK);
     }
 
     private boolean tickRestockWait() {
@@ -1910,19 +1910,19 @@ public class automoss extends Module {
     }
 
     private boolean tickUnstuck() {
-        if (mc.player == null || mc.world == null) return false;
+        if (mc.player == null || mc.level == null) return false;
         boolean inWater = touchingWater();
         if (inWater) {
             if (escaping) { escaping = false; pillarPlaced = 0; pillarPhase = 0; }
-            noProgressTicks = 0; lastProgressPos = mc.player.getPos(); return false;
+            noProgressTicks = 0; lastProgressPos = mc.player.position(); return false;
         }
         boolean blockedAtFeet = hasPlayerSpaceObstruction(), prone = isProne();
         if ((blockedAtFeet || prone) && breakAboveCooldown <= 0) {
             if (clearPlayerSpaceObstruction()) {
-                breakAboveCooldown = 4; noProgressTicks = 0; lastProgressPos = mc.player.getPos(); return true;
+                breakAboveCooldown = 4; noProgressTicks = 0; lastProgressPos = mc.player.position(); return true;
             }
             if (prone && breakBlockAbove()) {
-                breakAboveCooldown = 4; noProgressTicks = 0; lastProgressPos = mc.player.getPos(); return true;
+                breakAboveCooldown = 4; noProgressTicks = 0; lastProgressPos = mc.player.position(); return true;
             }
         }
         if (escaping) return runPillarEscape();
@@ -1934,32 +1934,32 @@ public class automoss extends Module {
     }
 
     private boolean hasPlayerSpaceObstruction() {
-        if (mc.player == null || mc.world == null) return false;
-        BlockPos feet = mc.player.getBlockPos();
-        return isBreakablePlayerSpaceBlock(feet) || isBreakablePlayerSpaceBlock(feet.up());
+        if (mc.player == null || mc.level == null) return false;
+        BlockPos feet = mc.player.blockPosition();
+        return isBreakablePlayerSpaceBlock(feet) || isBreakablePlayerSpaceBlock(feet.above());
     }
 
     private boolean clearPlayerSpaceObstruction() {
-        if (mc.player == null || mc.world == null || mc.interactionManager == null) return false;
-        BlockPos feet = mc.player.getBlockPos();
-        for (BlockPos pos : new BlockPos[]{ feet, feet.up() }) {
+        if (mc.player == null || mc.level == null || mc.gameMode == null) return false;
+        BlockPos feet = mc.player.blockPosition();
+        for (BlockPos pos : new BlockPos[]{ feet, feet.above() }) {
             if (!isBreakablePlayerSpaceBlock(pos)) continue;
             if (!tryConsumePacket(1)) return false;
-            mc.interactionManager.attackBlock(pos, Direction.UP);
-            mc.player.swingHand(Hand.MAIN_HAND);
+            mc.gameMode.startDestroyBlock(pos, Direction.UP);
+            mc.player.swing(InteractionHand.MAIN_HAND);
             boneMealTargetCacheTTL = 0; mossInRangeCacheTTL = 0; return true;
         }
         return false;
     }
 
     private boolean isBreakablePlayerSpaceBlock(BlockPos pos) {
-        if (mc.world == null) return false;
-        BlockState state = mc.world.getBlockState(pos);
+        if (mc.level == null) return false;
+        BlockState state = mc.level.getBlockState(pos);
         if (state.isAir() || !state.getFluidState().isEmpty()) return false;
-        if (state.getHardness(mc.world, pos) < 0) return false;
+        if (state.getDestroySpeed(mc.level, pos) < 0) return false;
         Block block = state.getBlock();
         if (block == Blocks.MOSS_CARPET || block == Blocks.AZALEA || block == Blocks.FLOWERING_AZALEA) return true;
-        String name = block.getTranslationKey();
+        String name = block.getDescriptionId();
         return name.contains("moss_carpet") || name.contains("azalea")
                 || name.contains("tall_grass") || name.contains("short_grass")
                 || (name.contains("grass") && !name.contains("block"))
@@ -1969,38 +1969,38 @@ public class automoss extends Module {
 
     private boolean isInPlayerSpace(BlockPos pos) {
         if (mc.player == null) return false;
-        BlockPos feet = mc.player.getBlockPos();
-        return pos.equals(feet) || pos.equals(feet.up());
+        BlockPos feet = mc.player.blockPosition();
+        return pos.equals(feet) || pos.equals(feet.above());
     }
 
     private boolean isProne() {
         if (mc.player == null) return false;
         Pose p = mc.player.getPose();
-        return p == Pose.SWIMMING || mc.player.isCrawling();
+        return p == Pose.SWIMMING || mc.player.isVisuallyCrawling();
     }
 
     private boolean touchingWater() {
-        if (mc.player == null || mc.world == null) return false;
-        if (mc.player.isTouchingWater() || mc.player.isSubmergedInWater()) return true;
-        BlockPos feet = mc.player.getBlockPos();
-        return !mc.world.getFluidState(feet).isEmpty() || !mc.world.getFluidState(feet.up()).isEmpty();
+        if (mc.player == null || mc.level == null) return false;
+        if (mc.player.isInWater() || mc.player.isUnderWater()) return true;
+        BlockPos feet = mc.player.blockPosition();
+        return !mc.level.getFluidState(feet).isEmpty() || !mc.level.getFluidState(feet.above()).isEmpty();
     }
 
     private boolean breakBlockAbove() {
-        if (mc.player == null || mc.world == null || mc.interactionManager == null) return false;
-        BlockPos feet = mc.player.getBlockPos();
-        for (BlockPos above : new BlockPos[]{ feet.up(), feet.up(2) }) {
-            BlockState st = mc.world.getBlockState(above);
+        if (mc.player == null || mc.level == null || mc.gameMode == null) return false;
+        BlockPos feet = mc.player.blockPosition();
+        for (BlockPos above : new BlockPos[]{ feet.above(), feet.above(2) }) {
+            BlockState st = mc.level.getBlockState(above);
             if (st.isAir() || !st.getFluidState().isEmpty()) continue;
-            if (st.getHardness(mc.world, above) < 0) continue;
+            if (st.getDestroySpeed(mc.level, above) < 0) continue;
             Vec3 hv = new Vec3(above.getX() + 0.5, above.getY(), above.getZ() + 0.5);
             double[] yp = lookAt(hv); final BlockPos aboveF = above;
             rotateOnce(yp[0], yp[1], 100, true, () -> {
-                if (mc.player == null || mc.world == null || mc.interactionManager == null) return;
-                BlockState now = mc.world.getBlockState(aboveF);
+                if (mc.player == null || mc.level == null || mc.gameMode == null) return;
+                BlockState now = mc.level.getBlockState(aboveF);
                 if (now.isAir() || !now.getFluidState().isEmpty()) return;
-                mc.interactionManager.attackBlock(aboveF, Direction.DOWN);
-                mc.player.swingHand(Hand.MAIN_HAND);
+                mc.gameMode.startDestroyBlock(aboveF, Direction.DOWN);
+                mc.player.swing(InteractionHand.MAIN_HAND);
             });
             return true;
         }
@@ -2008,11 +2008,11 @@ public class automoss extends Module {
     }
 
     private boolean runPillarEscape() {
-        if (mc.player == null || mc.world == null || mc.interactionManager == null) return false;
-        boolean climbedOut = !touchingWater() && !isProne() && mc.player.isOnGround();
+        if (mc.player == null || mc.level == null || mc.gameMode == null) return false;
+        boolean climbedOut = !touchingWater() && !isProne() && mc.player.onGround();
         if (climbedOut || pillarPlaced >= pillarMaxHeight.get()) {
             escaping = false; pillarPlaced = 0; pillarPhase = 0;
-            noProgressTicks = 0; lastProgressPos = mc.player.getPos(); return false;
+            noProgressTicks = 0; lastProgressPos = mc.player.position(); return false;
         }
         int pillarSlot = findPillarBlockSlot();
         if (pillarSlot < 0) { escaping = false; return false; }
@@ -2021,39 +2021,39 @@ public class automoss extends Module {
             pillarPhase = 2;
         }
         if (pillarPhase == 0) {
-            rotateOnce(mc.player.getYaw(), 90, 100, () -> {});
-            if (mc.player.isOnGround() || touchingWater()) mc.player.jump();
+            rotateOnce(mc.player.getYRot(), 90, 100, () -> {});
+            if (mc.player.onGround() || touchingWater()) mc.player.jumpFromGround();
             pillarPhase = 1; pillarStepTimer = pillarStepDelay.get(); return true;
         }
-        BlockPos feet = mc.player.getBlockPos(), against = null;
+        BlockPos feet = mc.player.blockPosition(), against = null;
         for (int d = 1; d <= 3; d++) {
-            BlockPos p = feet.down(d); BlockState s = mc.world.getBlockState(p);
-            if (!s.isAir() && !s.isReplaceable() && s.getFluidState().isEmpty()) { against = p; break; }
+            BlockPos p = feet.below(d); BlockState s = mc.level.getBlockState(p);
+            if (!s.isAir() && !s.canBeReplaced() && s.getFluidState().isEmpty()) { against = p; break; }
         }
         if (against == null) { pillarPhase = 1; pillarStepTimer = pillarStepDelay.get(); return true; }
-        BlockPos placeAt = against.up();
-        if (!mc.world.getBlockState(placeAt).isAir() && !mc.world.getBlockState(placeAt).isReplaceable()) {
+        BlockPos placeAt = against.above();
+        if (!mc.level.getBlockState(placeAt).isAir() && !mc.level.getBlockState(placeAt).canBeReplaced()) {
             pillarPhase = 1; pillarStepTimer = pillarStepDelay.get(); return true;
         }
         final BlockPos againstF = against; final int slotF = pillarSlot;
         Vec3 hv = new Vec3(againstF.getX() + 0.5, againstF.getY() + 1.0, againstF.getZ() + 0.5);
         double[] yp = lookAt(hv);
-        int prevSlot = mc.player.getInventory().selectedSlot;
-        mc.player.getInventory().selectedSlot = pillarSlot;
+        int prevSlot = mc.player.getInventory().getSelectedSlot();
+        mc.player.getInventory().setSelectedSlot(pillarSlot);
         rotateOnce(yp[0], yp[1], 100, true, () -> {
-            if (mc.player == null || mc.world == null || mc.interactionManager == null) return;
+            if (mc.player == null || mc.level == null || mc.gameMode == null) return;
             Block held = blockOfStack(slotF); if (held == null) return;
-            BlockState a = mc.world.getBlockState(againstF);
-            if (a.isAir() || a.isReplaceable() || !a.getFluidState().isEmpty()) return;
-            BlockState at = mc.world.getBlockState(againstF.up());
-            if (!at.isAir() && !at.isReplaceable()) return;
-            if (mc.player.getEyePos().squaredDistanceTo(hv) > 4.4 * 4.4) return;
+            BlockState a = mc.level.getBlockState(againstF);
+            if (a.isAir() || a.canBeReplaced() || !a.getFluidState().isEmpty()) return;
+            BlockState at = mc.level.getBlockState(againstF.above());
+            if (!at.isAir() && !at.canBeReplaced()) return;
+            if (mc.player.getEyePosition().distanceToSqr(hv) > 4.4 * 4.4) return;
             if (!tryConsumePacket(1)) return;
-            mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND,
+            mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND,
                     new BlockHitResult(hv, Direction.UP, againstF, false));
-            mc.player.swingHand(Hand.MAIN_HAND);
+            mc.player.swing(InteractionHand.MAIN_HAND);
         });
-        mc.player.getInventory().selectedSlot = prevSlot;
+        mc.player.getInventory().setSelectedSlot(prevSlot);
         pillarPlaced++; pillarPhase = 0; pillarStepTimer = pillarStepDelay.get();
         return true;
     }
@@ -2071,9 +2071,9 @@ public class automoss extends Module {
                 Block b = blockOfStack(inv);
                 if (b == null || !usable.contains(b)) continue;
                 for (int hot = 0; hot < 9; hot++) {
-                    if (!mc.player.getInventory().getStack(hot).isEmpty()) continue;
+                    if (!mc.player.getInventory().getItem(hot).isEmpty()) continue;
                     if (!tryConsumePacket(1)) break;
-                    mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId,
+                    mc.gameMode.handleContainerInput(mc.player.inventoryMenu.containerId,
                             playerInvToHandlerSlot(inv), hot, ContainerInput.SWAP, mc.player);
                     return hot;
                 }
@@ -2085,26 +2085,26 @@ public class automoss extends Module {
 
 
     private boolean detectKillAura() {
-        if (mc.player == null || mc.world == null || !killAuraCompat.get()) return false;
-        if (mc.player.handSwinging || mc.player.handSwingTicks > 0) {
-            net.minecraft.util.hit.HitResult hit = mc.crosshairTarget;
-            if (hit instanceof net.minecraft.util.hit.EntityHitResult ehr
-                    && ehr.getEntity() instanceof net.minecraft.entity.LivingEntity) {
+        if (mc.player == null || mc.level == null || !killAuraCompat.get()) return false;
+        if (mc.player.swinging || mc.player.swingTime > 0) {
+            net.minecraft.world.phys.HitResult hit = mc.hitResult;
+            if (hit instanceof net.minecraft.world.phys.EntityHitResult ehr
+                    && ehr.getEntity() instanceof net.minecraft.world.entity.LivingEntity) {
                 cachedKillAuraResult = true; killAuraScanCooldown = KA_SCAN_INTERVAL; return true;
             }
         }
         if (killAuraScanCooldown > 0) { killAuraScanCooldown--; return cachedKillAuraResult; }
         killAuraScanCooldown = KA_SCAN_INTERVAL;
-        if (mc.player.handSwinging || mc.player.handSwingTicks > 0) {
-            net.minecraft.item.Item held = mc.player.getMainHandStack().getItem();
-            boolean melee = held instanceof net.minecraft.item.SwordItem
-                    || held instanceof net.minecraft.item.AxeItem
-                    || held instanceof net.minecraft.item.PickaxeItem;
+        if (mc.player.swinging || mc.player.swingTime > 0) {
+            net.minecraft.world.item.Item held = mc.player.getMainHandItem().getItem();
+            boolean melee = mc.player.getMainHandItem().is(net.minecraft.tags.ItemTags.SWORDS)
+                    || held instanceof net.minecraft.world.item.AxeItem
+                    || mc.player.getMainHandItem().is(net.minecraft.tags.ItemTags.PICKAXES);
             if (melee) {
-                for (net.minecraft.entity.Entity e : mc.world.getEntities()) {
-                    if (!(e instanceof net.minecraft.entity.LivingEntity)) continue;
+                for (net.minecraft.world.entity.Entity e : mc.level.entitiesForRendering()) {
+                    if (!(e instanceof net.minecraft.world.entity.LivingEntity)) continue;
                     if (e == mc.player) continue;
-                    if (mc.player.squaredDistanceTo(e) <= 36.0) { cachedKillAuraResult = true; return true; }
+                    if (mc.player.distanceToSqr(e) <= 36.0) { cachedKillAuraResult = true; return true; }
                 }
             }
         }
@@ -2126,7 +2126,7 @@ public class automoss extends Module {
 
 
     private double[] lookAt(Vec3 target) {
-        Vec3 eye = mc.player.getEyePos();
+        Vec3 eye = mc.player.getEyePosition();
         double dx = target.x - eye.x, dy = target.y - eye.y, dz = target.z - eye.z;
         double horiz = Math.sqrt(dx * dx + dz * dz);
         return new double[]{ Math.toDegrees(Math.atan2(dz, dx)) - 90.0, -Math.toDegrees(Math.atan2(dy, horiz)) };
@@ -2160,25 +2160,25 @@ public class automoss extends Module {
                 if (BaritoneAPI.getProvider().getPrimaryBaritone().getPathingBehavior().isPathing()) return true;
             } catch (Throwable ignored) {}
         }
-        Vec3 v = mc.player.getVelocity();
+        Vec3 v = mc.player.getDeltaMovement();
         return (v.x * v.x + v.z * v.z) > 0.0025;
     }
 
 
     private int selectHotbarSynced(int slot) {
-        int prev = mc.player.getInventory().selectedSlot;
+        int prev = mc.player.getInventory().getSelectedSlot();
         if (slot < 0 || slot > 8 || slot == prev) return prev;
-        mc.player.getInventory().selectedSlot = slot;
-        if (mc.player.networkHandler != null && tryConsumePacket(1))
-            mc.player.networkHandler.sendPacket(new ServerboundSetCarriedItemPacket(slot));
+        mc.player.getInventory().setSelectedSlot(slot);
+        if (mc.player.connection != null && tryConsumePacket(1))
+            mc.player.connection.send(new ServerboundSetCarriedItemPacket(slot));
         return prev;
     }
 
     private void restoreHotbarSynced(int prev) {
-        if (prev < 0 || prev > 8 || mc.player.getInventory().selectedSlot == prev) return;
-        mc.player.getInventory().selectedSlot = prev;
-        if (mc.player.networkHandler != null && tryConsumePacket(1))
-            mc.player.networkHandler.sendPacket(new ServerboundSetCarriedItemPacket(prev));
+        if (prev < 0 || prev > 8 || mc.player.getInventory().getSelectedSlot() == prev) return;
+        mc.player.getInventory().setSelectedSlot(prev);
+        if (mc.player.connection != null && tryConsumePacket(1))
+            mc.player.connection.send(new ServerboundSetCarriedItemPacket(prev));
     }
 
 
@@ -2186,8 +2186,8 @@ public class automoss extends Module {
         if (mc.player == null) return 0;
         int n = 0;
         for (int i = 0; i < 36; i++)
-            if (mc.player.getInventory().getStack(i).getItem() == Items.BONE_MEAL)
-                n += mc.player.getInventory().getStack(i).getCount();
+            if (mc.player.getInventory().getItem(i).getItem() == Items.BONE_MEAL)
+                n += mc.player.getInventory().getItem(i).getCount();
         return n;
     }
 
@@ -2196,7 +2196,7 @@ public class automoss extends Module {
     private int findBoneBlockHandlerSlot() {
         if (mc.player == null) return -1;
         for (int s = INV_FIRST; s <= INV_LAST; s++) {
-            if (mc.player.playerScreenHandler.getSlot(s).getStack().getItem() == Items.BONE_BLOCK)
+            if (mc.player.inventoryMenu.getSlot(s).getItem().getItem() == Items.BONE_BLOCK)
                 return s;
         }
         return -1;
@@ -2205,14 +2205,14 @@ public class automoss extends Module {
     private int findBoneMealSlot() {
         if (mc.player == null) return -1;
         for (int i = 0; i < 9; i++)
-            if (mc.player.getInventory().getStack(i).getItem() == Items.BONE_MEAL) return i;
+            if (mc.player.getInventory().getItem(i).getItem() == Items.BONE_MEAL) return i;
         if (inventoryAllow.get()) {
             for (int inv = 9; inv < 36; inv++) {
-                if (mc.player.getInventory().getStack(inv).getItem() != Items.BONE_MEAL) continue;
+                if (mc.player.getInventory().getItem(inv).getItem() != Items.BONE_MEAL) continue;
                 for (int hot = 0; hot < 9; hot++) {
-                    if (!mc.player.getInventory().getStack(hot).isEmpty()) continue;
+                    if (!mc.player.getInventory().getItem(hot).isEmpty()) continue;
                     if (!tryConsumePacket(1)) break;
-                    mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId,
+                    mc.gameMode.handleContainerInput(mc.player.inventoryMenu.containerId,
                             playerInvToHandlerSlot(inv), hot, ContainerInput.SWAP, mc.player);
                     return hot;
                 }
@@ -2225,14 +2225,14 @@ public class automoss extends Module {
     private int findMossBlockSlot() {
         if (mc.player == null) return -1;
         for (int i = 0; i < 9; i++)
-            if (mc.player.getInventory().getStack(i).getItem() == Items.MOSS_BLOCK) return i;
+            if (mc.player.getInventory().getItem(i).getItem() == Items.MOSS_BLOCK) return i;
         if (inventoryAllow.get()) {
             for (int inv = 9; inv < 36; inv++) {
-                if (mc.player.getInventory().getStack(inv).getItem() != Items.MOSS_BLOCK) continue;
+                if (mc.player.getInventory().getItem(inv).getItem() != Items.MOSS_BLOCK) continue;
                 for (int hot = 0; hot < 9; hot++) {
-                    if (!mc.player.getInventory().getStack(hot).isEmpty()) continue;
+                    if (!mc.player.getInventory().getItem(hot).isEmpty()) continue;
                     if (!tryConsumePacket(1)) break;
-                    mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId,
+                    mc.gameMode.handleContainerInput(mc.player.inventoryMenu.containerId,
                             playerInvToHandlerSlot(inv), hot, ContainerInput.SWAP, mc.player);
                     return hot;
                 }
@@ -2248,7 +2248,7 @@ public class automoss extends Module {
 
     private Block blockOfStack(int invIndex) {
         if (mc.player == null) return null;
-        var item = mc.player.getInventory().getStack(invIndex).getItem();
+        var item = mc.player.getInventory().getItem(invIndex).getItem();
         return item instanceof BlockItem bi ? bi.getBlock() : null;
     }
 
@@ -2260,7 +2260,7 @@ public class automoss extends Module {
 
     private boolean isEatingProtectedFood() {
         if (mc.player == null || !mc.player.isUsingItem()) return false;
-        net.minecraft.item.Item item = mc.player.getActiveItem().getItem();
+        net.minecraft.world.item.Item item = mc.player.getActiveItem().getItem();
         return item == Items.ENCHANTED_GOLDEN_APPLE
                 || item == Items.GOLDEN_CARROT
                 || item == Items.COOKED_BEEF;

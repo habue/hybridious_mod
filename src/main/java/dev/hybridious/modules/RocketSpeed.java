@@ -89,9 +89,9 @@ public class RocketSpeed extends Module {
         }
 
         // Calculate speed in km/h
-        double deltaX = mc.player.getX() - mc.player.prevX;
-        double deltaY = mc.player.getY() - mc.player.prevY;
-        double deltaZ = mc.player.getZ() - mc.player.prevZ;
+        double deltaX = mc.player.getX() - mc.player.xo;
+        double deltaY = mc.player.getY() - mc.player.yo;
+        double deltaZ = mc.player.getZ() - mc.player.zo;
         double speed = Math.sqrt(deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ);
         double speedKmh = speed * 72.0; // Convert to km/h: blocks/tick * 20 tps * 3.6 m/s to km/h
 
@@ -113,21 +113,21 @@ public class RocketSpeed extends Module {
     private boolean isElytraFlying() {
         if (mc.player == null) return false;
         // Check if player is not on ground and has elytra equipped
-        return !mc.player.isOnGround() &&
-                mc.player.getInventory().getArmorStack(2).getItem() == Items.ELYTRA;
+        return !mc.player.onGround() &&
+                mc.player.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.CHEST).getItem() == Items.ELYTRA;
     }
 
     private void useFireworks() {
-        if (mc.player == null || mc.interactionManager == null) return;
+        if (mc.player == null || mc.gameMode == null) return;
 
         // Count total fireworks in hotbar
         int totalFireworks = 0;
         int fireworkSlot = -1;
 
         for (int i = 0; i < 9; i++) {
-            if (mc.player.getInventory().getStack(i).getItem() == Items.FIREWORK_ROCKET) {
+            if (mc.player.getInventory().getItem(i).getItem() == Items.FIREWORK_ROCKET) {
                 if (fireworkSlot == -1) fireworkSlot = i;
-                totalFireworks += mc.player.getInventory().getStack(i).getCount();
+                totalFireworks += mc.player.getInventory().getItem(i).getCount();
             }
         }
 
@@ -143,16 +143,16 @@ public class RocketSpeed extends Module {
         }
 
         // Save current slot
-        int previousSlot = mc.player.getInventory().selectedSlot;
+        int previousSlot = mc.player.getInventory().getSelectedSlot();
 
         // Use fireworks
         for (int i = 0; i < fireworkCount.get(); i++) {
-            mc.player.getInventory().selectedSlot = fireworkSlot;
-            mc.interactionManager.interactItem(mc.player, InteractionHand.MAIN_HAND);
+            mc.player.getInventory().setSelectedSlot(fireworkSlot);
+            mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
         }
 
         // Restore previous slot
-        mc.player.getInventory().selectedSlot = previousSlot;
+        mc.player.getInventory().setSelectedSlot(previousSlot);
 
         // Set cooldown
         cooldownTicks = cooldown.get();
@@ -165,8 +165,8 @@ public class RocketSpeed extends Module {
         // Count total fireworks
         int totalFireworks = 0;
         for (int i = 0; i < 9; i++) {
-            if (mc.player.getInventory().getStack(i).getItem() == Items.FIREWORK_ROCKET) {
-                totalFireworks += mc.player.getInventory().getStack(i).getCount();
+            if (mc.player.getInventory().getItem(i).getItem() == Items.FIREWORK_ROCKET) {
+                totalFireworks += mc.player.getInventory().getItem(i).getCount();
             }
         }
 

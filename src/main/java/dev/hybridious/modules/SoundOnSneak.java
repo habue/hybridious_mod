@@ -209,7 +209,7 @@ public class SoundOnSneak extends Module {
     private void onTick(TickEvent.Post event) {
         if (mc.player == null) return;
 
-        boolean isSneaking = mc.player.isSneaking();
+        boolean isSneaking = mc.player.isShiftKeyDown();
 
         // Check timer
         if (enableTimer.get()) {

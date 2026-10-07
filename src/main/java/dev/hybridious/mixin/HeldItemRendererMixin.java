@@ -2,33 +2,32 @@ package dev.hybridious.mixin;
 
 import dev.hybridious.modules.MapFilterModule;
 import meteordevelopment.meteorclient.systems.modules.Modules;
-import net.minecraft.client.render.VertexConsumerProvider;
-import net.minecraft.client.render.item.HeldItemRenderer;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.item.ItemStack;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.component.type.MapIdComponent;
+import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.ItemInHandRenderer;
+import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.level.saveddata.maps.MapId;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(value = HeldItemRenderer.class, priority = 1100)
+@Mixin(value = ItemInHandRenderer.class, priority = 1100)
 public class HeldItemRendererMixin {
 
     @Inject(
-            method = "renderFirstPersonMap",
+            method = "renderMap",
             at = @At("HEAD"),
-            cancellable = true,
-            require = 0
+            cancellable = true
     )
-    private void onRenderFirstPersonMap(MatrixStack matrices, VertexConsumerProvider vertexConsumers,
+    private void onRenderFirstPersonMap(PoseStack matrices, SubmitNodeCollector vertexConsumers,
                                         int swingProgress, ItemStack map, CallbackInfo ci) {
         try {
             MapFilterModule module = Modules.get().get(MapFilterModule.class);
 
             if (module != null && module.isActive()) {
-                MapIdComponent mapId = map.get(DataComponentTypes.MAP_ID);
+                MapId mapId = map.get(DataComponents.MAP_ID);
 
                 if (mapId != null) {
                     int id = mapId.id();

@@ -97,7 +97,7 @@ public class MapFilterModule extends Module {
 
         // Initialize hash cache
         Minecraft client = Minecraft.getInstance();
-        String minecraftDir = client.runDirectory.getAbsolutePath();
+        String minecraftDir = client.gameDirectory.getAbsolutePath();
         hashCache = new MapHashCache(minecraftDir);
 
         validationExecutor = Executors.newSingleThreadExecutor();
@@ -202,8 +202,8 @@ public class MapFilterModule extends Module {
         MapId mapIdComponent = new MapId(mapId);
 
         // Try integrated server first (singleplayer)
-        if (client.getServer() != null) {
-            MapItemSavedData state = client.getServer().getOverworld().getMapItemSavedData(mapIdComponent);
+        if (client.getSingleplayerServer() != null) {
+            MapItemSavedData state = client.getSingleplayerServer().overworld().getMapData(mapIdComponent);
             if (state != null) {
                 if (logResults.get()) {
                     System.out.println("[MapFilter] Got MapItemSavedData for " + mapId + " from integrated server");
@@ -213,11 +213,11 @@ public class MapFilterModule extends Module {
         }
 
         // Fall back to client world (multiplayer)
-        if (client.world != null) {
-            MapItemSavedData state = client.world.getMapItemSavedData(mapIdComponent);
+        if (client.level != null) {
+            MapItemSavedData state = client.level.getMapData(mapIdComponent);
             if (state != null) {
                 if (logResults.get()) {
-                    System.out.println("[MapFilter] Got MapItemSavedData for " + mapId + " from client.world");
+                    System.out.println("[MapFilter] Got MapItemSavedData for " + mapId + " from client.level");
                 }
                 return state;
             }

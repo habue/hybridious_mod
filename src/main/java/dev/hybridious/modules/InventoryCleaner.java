@@ -109,7 +109,7 @@ public class InventoryCleaner extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.interactionManager == null) return;
+        if (mc.player == null || mc.gameMode == null) return;
 
         List<Item> list = items.get();
         if (list.isEmpty()) return;
@@ -121,7 +121,7 @@ public class InventoryCleaner extends Module {
         tickCounter = 0;
 
         for (int slot = 0; slot < 36; slot++) {
-            ItemStack stack = mc.player.getInventory().getStack(slot);
+            ItemStack stack = mc.player.getInventory().getItem(slot);
             if (stack.isEmpty()) continue;
 
             if (list.contains(stack.getItem())) {
@@ -134,8 +134,8 @@ public class InventoryCleaner extends Module {
     private void dropSlot(int inventorySlot) {
         int handlerSlot = inventorySlot < 9 ? inventorySlot + 36 : inventorySlot;
 
-        mc.interactionManager.clickSlot(
-                mc.player.playerScreenHandler.syncId, // syncId of the player's inventory container
+        mc.gameMode.handleContainerInput(
+                mc.player.inventoryMenu.containerId, // syncId of the player's inventory container
                 handlerSlot,
                 1,                                    // 1 = drop whole stack
                 ContainerInput.THROW,

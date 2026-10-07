@@ -31,16 +31,16 @@ public class TabGuiScale extends Module {
 
     @Override
     public void onActivate() {
-        originalGuiScale = mc.options.getGuiScale().getValue();
+        originalGuiScale = mc.options.guiScale().get();
         tabListOpen = false;
     }
 
     @Override
     public void onDeactivate() {
         // Restore original GUI scale when module is disabled
-        if (originalGuiScale != -1 && mc.options.getGuiScale().getValue() != originalGuiScale) {
-            mc.options.getGuiScale().setValue(originalGuiScale);
-            mc.onResolutionChanged();
+        if (originalGuiScale != -1 && mc.options.guiScale().get() != originalGuiScale) {
+            mc.options.guiScale().set(originalGuiScale);
+            mc.resizeGui();
         }
         originalGuiScale = -1;
         tabListOpen = false;
@@ -48,27 +48,27 @@ public class TabGuiScale extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         // Check if tab key is pressed (player list is shown)
-        boolean isTabPressed = mc.options.playerListKey.isPressed();
+        boolean isTabPressed = mc.options.keyPlayerList.isDown();
 
         if (isTabPressed && !tabListOpen) {
             // Tab just pressed - change to custom GUI scale
             if (originalGuiScale == -1) {
-                originalGuiScale = mc.options.getGuiScale().getValue();
+                originalGuiScale = mc.options.guiScale().get();
             }
 
-            if (mc.options.getGuiScale().getValue() != tabGuiScale.get()) {
-                mc.options.getGuiScale().setValue(tabGuiScale.get());
-                mc.onResolutionChanged();
+            if (mc.options.guiScale().get() != tabGuiScale.get()) {
+                mc.options.guiScale().set(tabGuiScale.get());
+                mc.resizeGui();
             }
             tabListOpen = true;
         } else if (!isTabPressed && tabListOpen) {
             // Tab just released - restore original GUI scale
-            if (originalGuiScale != -1 && mc.options.getGuiScale().getValue() != originalGuiScale) {
-                mc.options.getGuiScale().setValue(originalGuiScale);
-                mc.onResolutionChanged();
+            if (originalGuiScale != -1 && mc.options.guiScale().get() != originalGuiScale) {
+                mc.options.guiScale().set(originalGuiScale);
+                mc.resizeGui();
             }
             tabListOpen = false;
         }

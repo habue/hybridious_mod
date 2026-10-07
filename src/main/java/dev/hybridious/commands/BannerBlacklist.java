@@ -4,7 +4,7 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import dev.hybridious.modules.BannerFinder;
 import meteordevelopment.meteorclient.commands.Command;
 import meteordevelopment.meteorclient.systems.modules.Modules;
-import net.minecraft.command.CommandSource;
+import net.minecraft.client.multiplayer.ClientSuggestionProvider;
 
 import static com.mojang.brigadier.Command.SINGLE_SUCCESS;
 
@@ -14,7 +14,7 @@ public class BannerBlacklist extends Command {
     }
 
     @Override
-    public void build(LiteralArgumentBuilder<CommandSource> builder) {
+    public void build(LiteralArgumentBuilder<ClientSuggestionProvider> builder) {
         builder.then(literal("add")
                 .executes(context -> {
                     BannerFinder module = Modules.get().get(BannerFinder.class);

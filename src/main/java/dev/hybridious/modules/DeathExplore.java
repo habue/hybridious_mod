@@ -5,8 +5,8 @@ import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.gui.screen.DeathScreen;
-import net.minecraft.text.Text;
+import net.minecraft.client.gui.screens.DeathScreen;
+import net.minecraft.network.chat.Component;
 
 public class DeathExplore extends Module {
     private boolean isDead = false;
@@ -19,7 +19,7 @@ public class DeathExplore extends Module {
     private void onTick(TickEvent.Post event) {
         if (mc.player == null) return;
 
-        if (mc.player.isDead()) {
+        if (mc.player.isDeadOrDying()) {
             mc.player.setHealth(20.0f);
             mc.setScreen(null);
             isDead = true;
@@ -35,7 +35,7 @@ public class DeathExplore extends Module {
     public void onDeactivate() {
         if (isDead && mc.player != null) {
             mc.player.setHealth(0.0f);
-            mc.setScreen(new DeathScreen(Text.of("You died!"), mc.world.getLevelProperties().isHardcore()));
+            mc.setScreen(new DeathScreen(Component.literal("You died!"), mc.level.getLevelData().isHardcore(), mc.player));
             isDead = false;
         }
     }

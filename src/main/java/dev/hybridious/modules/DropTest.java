@@ -1,6 +1,7 @@
 package dev.hybridious.modules;
 
 import dev.hybridious.Hybridious;
+import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.meteorclient.MeteorClient;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
@@ -162,12 +163,12 @@ public class DropTest extends Module {
         saveTestResults();
     }
 
-    @EventInteractionHandler
+    @EventHandler
     private void onTick(TickEvent.Post event) {
         if (!testActive) return;
 
         // Safety checks
-        if (mc == null || mc.world == null || mc.player == null) {
+        if (mc == null || mc.level == null || mc.player == null) {
             return;
         }
 
@@ -202,11 +203,11 @@ public class DropTest extends Module {
 
         // Scan for item entities in render distance
         try {
-            int renderDistance = mc.options.getViewDistance().getValue() * 16;
+            int renderDistance = mc.options.renderDistance().get() * 16;
 
-            List<ItemEntity> entities = mc.world.getEntitiesByClass(
+            List<ItemEntity> entities = mc.level.getEntitiesOfClass(
                     ItemEntity.class,
-                    mc.player.getBoundingAABB().expand(renderDistance),
+                    mc.player.getBoundingBox().inflate(renderDistance),
                     entity -> entity != null && !entity.isRemoved()
             );
 
@@ -214,7 +215,7 @@ public class DropTest extends Module {
                 try {
                     if (itemEntity == null) continue;
 
-                    UUID entityId = itemEntity.getUuid();
+                    UUID entityId = itemEntity.getUUID();
                     if (entityId == null) continue;
 
                     // Only count each entity once
@@ -222,10 +223,10 @@ public class DropTest extends Module {
                         continue;
                     }
 
-                    ItemStack stack = itemEntity.getStack();
+                    ItemStack stack = itemEntity.getItem();
                     if (stack == null || stack.isEmpty()) continue;
 
-                    String itemId = BuiltInRegistries.ITEM.getId(stack.getItem()).toString();
+                    String itemId = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
                     if (itemId == null) continue;
 
                     // Check if we should track this item

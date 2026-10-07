@@ -73,15 +73,15 @@ public class LawnMower extends Module {
 
     /** Called directly by AutoMoss when it controls scheduling. */
     public void tick() {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
         if (timer > 0) { timer--; return; }
 
         cachedTargets = findTargets();
         if (cachedTargets.isEmpty()) return;
 
         cachedTargets.sort((a, b) -> Double.compare(
-                mc.player.squaredDistanceTo(Vec3.ofCenter(a)),
-                mc.player.squaredDistanceTo(Vec3.ofCenter(b))));
+                mc.player.distanceToSqr(Vec3.atCenterOf(a)),
+                mc.player.distanceToSqr(Vec3.atCenterOf(b))));
 
         if (switchToShears.get()) {
             FindItemResult shears = InvUtils.find(Items.SHEARS);
@@ -102,7 +102,7 @@ public class LawnMower extends Module {
 
     private List<BlockPos> findTargets() {
         List<BlockPos> targets = new ArrayList<>();
-        BlockPos origin = mc.player.getBlockPos();
+        BlockPos origin = mc.player.blockPosition();
         int r = range.get();
         double rangeSq = (double) r * r;
 
@@ -110,8 +110,8 @@ public class LawnMower extends Module {
             for (int y = -r; y <= r; y++) {
                 for (int z = -r; z <= r; z++) {
                     if (x*x + y*y + z*z > rangeSq) continue;
-                    BlockPos pos = origin.add(x, y, z);
-                    if (blocksToBreakList.get().contains(mc.world.getBlockState(pos).getBlock()))
+                    BlockPos pos = origin.offset(x, y, z);
+                    if (blocksToBreakList.get().contains(mc.level.getBlockState(pos).getBlock()))
                         targets.add(pos);
                 }
             }
