@@ -7,7 +7,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.inventory.Slot;
-import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 
@@ -49,12 +49,12 @@ public class InventoryUtils {
 
         InventoryMenu handler = mc.player.playerScreenInteractionHandler;
 
-        mc.interactionManager.clickSlot(handler.syncId, pickupSlot, 0, ClickType.PICKUP, mc.player);
-        mc.interactionManager.clickSlot(handler.syncId, dumpSlot,   0, ClickType.PICKUP, mc.player);
+        mc.interactionManager.clickSlot(handler.syncId, pickupSlot, 0, ContainerInput.PICKUP, mc.player);
+        mc.interactionManager.clickSlot(handler.syncId, dumpSlot,   0, ContainerInput.PICKUP, mc.player);
     }
 
     public static void quickMove(Slot slot) {
-        mc.interactionManager.clickSlot(mc.player.currentScreenInteractionHandler.syncId, slot.getIndex(), 0, ClickType.QUICK_MOVE, mc.player);
+        mc.interactionManager.clickSlot(mc.player.currentScreenInteractionHandler.syncId, slot.getIndex(), 0, ContainerInput.QUICK_MOVE, mc.player);
     }
 
     public static void sendStartBreakBlockPacket(BlockPos pos) {
