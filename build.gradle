@@ -27,6 +27,8 @@ dependencies {
 
     implementation "meteordevelopment:meteor-client:${project.minecraft_version}-SNAPSHOT"
     compileOnly "meteordevelopment:baritone:26.1-SNAPSHOT"
+    // Meteor bundles this module; Loom also injects its interfaces into Minecraft.
+    compileOnly "net.fabricmc.fabric-api:fabric-resource-loader-v1:2.0.9+d871b99e4c"
 }
 
 tasks {
