@@ -9,10 +9,10 @@ import meteordevelopment.meteorclient.utils.player.FindItemResult;
 import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.meteorclient.utils.world.BlockUtils;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.*;
-import net.minecraft.item.Items;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.level.block.*;
+import net.minecraft.world.item.Items;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -80,8 +80,8 @@ public class LawnMower extends Module {
         if (cachedTargets.isEmpty()) return;
 
         cachedTargets.sort((a, b) -> Double.compare(
-                mc.player.squaredDistanceTo(Vec3d.ofCenter(a)),
-                mc.player.squaredDistanceTo(Vec3d.ofCenter(b))));
+                mc.player.squaredDistanceTo(Vec3.ofCenter(a)),
+                mc.player.squaredDistanceTo(Vec3.ofCenter(b))));
 
         if (switchToShears.get()) {
             FindItemResult shears = InvUtils.find(Items.SHEARS);
