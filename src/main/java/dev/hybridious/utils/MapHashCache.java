@@ -3,7 +3,7 @@ package dev.hybridious.utils;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
-import net.minecraft.item.map.MapState;
+import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
 
 import java.io.*;
 import java.lang.reflect.Field;
@@ -53,7 +53,7 @@ public class MapHashCache {
         loadCache();
     }
 
-    public String hashMap(MapState mapState) {
+    public String hashMap(MapItemSavedData mapState) {
         try {
             byte[] colors = extractMapColors(mapState);
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -174,22 +174,22 @@ public class MapHashCache {
         }
     }
 
-    private byte[] extractMapColors(MapState mapState) throws Exception {
+    private byte[] extractMapColors(MapItemSavedData mapState) throws Exception {
         try {
-            Field colorsField = MapState.class.getField("colors");
+            Field colorsField = MapItemSavedData.class.getField("colors");
             return (byte[]) colorsField.get(mapState);
         } catch (Exception e1) {
             try {
-                Field colorsField = MapState.class.getDeclaredField("colors");
+                Field colorsField = MapItemSavedData.class.getDeclaredField("colors");
                 colorsField.setAccessible(true);
                 return (byte[]) colorsField.get(mapState);
             } catch (Exception e2) {
                 try {
-                    Field colorsField = MapState.class.getDeclaredField("field_122");
+                    Field colorsField = MapItemSavedData.class.getDeclaredField("field_122");
                     colorsField.setAccessible(true);
                     return (byte[]) colorsField.get(mapState);
                 } catch (Exception e3) {
-                    for (Field field : MapState.class.getDeclaredFields()) {
+                    for (Field field : MapItemSavedData.class.getDeclaredFields()) {
                         if (field.getType().equals(byte[].class)) {
                             field.setAccessible(true);
                             byte[] array = (byte[]) field.get(mapState);
