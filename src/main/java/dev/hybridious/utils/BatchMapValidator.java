@@ -3,7 +3,7 @@ package dev.hybridious.utils;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import net.minecraft.item.map.MapState;
+import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -36,7 +36,7 @@ public class BatchMapValidator {
      * Validate multiple maps in a single batch request
      */
     public static Map<Integer, ValidationResult> validateBatch(
-            Map<Integer, MapState> mapStates,
+            Map<Integer, MapItemSavedData> mapStates,
             String apiUrl,
             Double threshold,
             boolean logResults) {
@@ -180,9 +180,9 @@ public class BatchMapValidator {
     }
 
     /**
-     * Convert MapState to base64-encoded PNG
+     * Convert MapItemSavedData to base64-encoded PNG
      */
-    private static String mapStateToBase64(MapState mapState) throws IOException, IllegalAccessException {
+    private static String mapStateToBase64(MapItemSavedData mapState) throws IOException, IllegalAccessException {
         BufferedImage image = new BufferedImage(128, 128, BufferedImage.TYPE_INT_RGB);
         byte[] colors = extractMapColors(mapState);
 
@@ -200,22 +200,22 @@ public class BatchMapValidator {
         return Base64.getEncoder().encodeToString(baos.toByteArray());
     }
 
-    private static byte[] extractMapColors(MapState mapState) throws IOException, IllegalAccessException {
+    private static byte[] extractMapColors(MapItemSavedData mapState) throws IOException, IllegalAccessException {
         try {
-            java.lang.reflect.Field colorsField = MapState.class.getField("colors");
+            java.lang.reflect.Field colorsField = MapItemSavedData.class.getField("colors");
             return (byte[]) colorsField.get(mapState);
         } catch (Exception e1) {
             try {
-                java.lang.reflect.Field colorsField = MapState.class.getDeclaredField("colors");
+                java.lang.reflect.Field colorsField = MapItemSavedData.class.getDeclaredField("colors");
                 colorsField.setAccessible(true);
                 return (byte[]) colorsField.get(mapState);
             } catch (Exception e2) {
                 try {
-                    java.lang.reflect.Field colorsField = MapState.class.getDeclaredField("field_122");
+                    java.lang.reflect.Field colorsField = MapItemSavedData.class.getDeclaredField("field_122");
                     colorsField.setAccessible(true);
                     return (byte[]) colorsField.get(mapState);
                 } catch (Exception e3) {
-                    for (java.lang.reflect.Field field : MapState.class.getDeclaredFields()) {
+                    for (java.lang.reflect.Field field : MapItemSavedData.class.getDeclaredFields()) {
                         if (field.getType().equals(byte[].class)) {
                             field.setAccessible(true);
                             byte[] array = (byte[]) field.get(mapState);
