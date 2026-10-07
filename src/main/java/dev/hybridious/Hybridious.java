@@ -15,7 +15,7 @@ public class Hybridious extends MeteorAddon {
 
     @Override
     public void onInitialize() {
-        LOG.info("Initializing Hybridious Addon for Minecraft 1.21.4");
+        LOG.info("Initializing Hybridious Addon for Minecraft 26.1.2");
         Modules.get().add(new DeathExplore());
         Modules.get().add(new automoss());
         Modules.get().add(new B36());
