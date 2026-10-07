@@ -10,17 +10,17 @@ import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.modules.Categories;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.Blocks;
-import net.minecraft.item.Items;
-import net.minecraft.network.packet.c2s.play.PlayerActionC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerInteractBlockC2SPacket;
-import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
-import net.minecraft.screen.slot.SlotActionType;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.item.Items;
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
+import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
+import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
+import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * B52 Module - Places and ignites TNT around the player.
@@ -203,7 +203,7 @@ public class B36 extends Module {
 
         // Force switch to TNT slot and notify the server
         mc.player.getInventory().selectedSlot = tntSlot;
-        mc.player.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(tntSlot));
+        mc.player.networkHandler.sendPacket(new ServerboundSetCarriedItemPacket(tntSlot));
 
         // Get player position and calculate placement area
         BlockPos playerPos = mc.player.getBlockPos();
@@ -232,7 +232,7 @@ public class B36 extends Module {
                     if (mc.player.getMainHandStack().getItem() != Items.TNT) {
                         // Try forcing the slot again
                         mc.player.getInventory().selectedSlot = tntSlot;
-                        mc.player.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(tntSlot));
+                        mc.player.networkHandler.sendPacket(new ServerboundSetCarriedItemPacket(tntSlot));
 
                         // Skip if still not holding TNT
                         if (mc.player.getMainHandStack().getItem() != Items.TNT) {
@@ -249,7 +249,7 @@ public class B36 extends Module {
 
                     // Switch to flint and steel and notify the server
                     mc.player.getInventory().selectedSlot = flintAndSteelSlot;
-                    mc.player.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(flintAndSteelSlot));
+                    mc.player.networkHandler.sendPacket(new ServerboundSetCarriedItemPacket(flintAndSteelSlot));
 
                     // Verify we have flint and steel in hand
                     if (mc.player.getMainHandStack().getItem() != Items.FLINT_AND_STEEL) {
@@ -257,7 +257,7 @@ public class B36 extends Module {
                     } else {
                         // Light TNT
                         useFlintAndSteel(blockPos);
-                        mc.player.swingHand(Hand.MAIN_HAND);
+                        mc.player.swingHand(InteractionHand.MAIN_HAND);
                     }
 
                     placed = true;
@@ -266,7 +266,7 @@ public class B36 extends Module {
                 } finally {
                     // Always return to original slot
                     mc.player.getInventory().selectedSlot = originalSlot;
-                    mc.player.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(originalSlot));
+                    mc.player.networkHandler.sendPacket(new ServerboundSetCarriedItemPacket(originalSlot));
                 }
 
                 break;
@@ -277,7 +277,7 @@ public class B36 extends Module {
         // If we didn't place anything but changed slots, restore previous slot
         if (!placed && mc.player.getInventory().selectedSlot != previousSlot) {
             mc.player.getInventory().selectedSlot = previousSlot;
-            mc.player.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(previousSlot));
+            mc.player.networkHandler.sendPacket(new ServerboundSetCarriedItemPacket(previousSlot));
         }
 
         return placed;
@@ -288,24 +288,24 @@ public class B36 extends Module {
      * @param pos The position to place at
      */
     private void airPlaceTnt(BlockPos pos) {
-        BlockHitResult bhr = new BlockHitResult(Vec3d.ofCenter(pos), Direction.UP, pos, false);
+        BlockHitResult bhr = new BlockHitResult(Vec3.ofCenter(pos), Direction.UP, pos, false);
 
         // Get current revision for accurate packet
         int currentRevision = mc.player.currentScreenHandler.getRevision();
 
         // Send the 3-packet sequence for airplace
-        mc.player.networkHandler.sendPacket(new PlayerActionC2SPacket(
-            PlayerActionC2SPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ORIGIN, Direction.DOWN));
+        mc.player.networkHandler.sendPacket(new ServerboundPlayerActionPacket(
+            ServerboundPlayerActionPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ORIGIN, Direction.DOWN));
 
-        mc.player.networkHandler.sendPacket(new PlayerInteractBlockC2SPacket(
-            Hand.OFF_HAND, bhr, currentRevision));
+        mc.player.networkHandler.sendPacket(new ServerboundUseItemOnPacket(
+            InteractionHand.OFF_HAND, bhr, currentRevision));
 
         // Swap back
-        mc.player.networkHandler.sendPacket(new PlayerActionC2SPacket(
-            PlayerActionC2SPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ORIGIN, Direction.DOWN));
+        mc.player.networkHandler.sendPacket(new ServerboundPlayerActionPacket(
+            ServerboundPlayerActionPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ORIGIN, Direction.DOWN));
 
         // Visual feedback
-        mc.player.swingHand(Hand.MAIN_HAND);
+        mc.player.swingHand(InteractionHand.MAIN_HAND);
     }
 
     /**
@@ -314,12 +314,12 @@ public class B36 extends Module {
      * @param expectedItem The item expected in that slot
      * @return true if holding the correct item, false otherwise
      */
-    private boolean verifyHoldingItem(int slot, net.minecraft.item.Item expectedItem) {
+    private boolean verifyHoldingItem(int slot, net.minecraft.world.item.Item expectedItem) {
         // Force the client to update the selected slot
         mc.player.getInventory().selectedSlot = slot;
 
         // Give the client a small moment to register the change
-        mc.player.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(slot));
+        mc.player.networkHandler.sendPacket(new ServerboundSetCarriedItemPacket(slot));
 
         // Verify we have the expected item in hand
         return mc.player.getMainHandStack().getItem() == expectedItem;
@@ -343,10 +343,10 @@ public class B36 extends Module {
      * @param pos The position to place at
      */
     private void placeBlock(BlockPos pos) {
-        Vec3d hitPos = new Vec3d(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
+        Vec3 hitPos = new Vec3(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
         BlockHitResult hit = new BlockHitResult(hitPos, Direction.UP, pos, false);
-        mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, hit);
-        mc.player.swingHand(Hand.MAIN_HAND);
+        mc.interactionManager.interactBlock(mc.player, InteractionHand.MAIN_HAND, hit);
+        mc.player.swingHand(InteractionHand.MAIN_HAND);
     }
 
     /**
@@ -354,9 +354,9 @@ public class B36 extends Module {
      * @param pos The position to use flint and steel
      */
     private void useFlintAndSteel(BlockPos pos) {
-        Vec3d hitPos = new Vec3d(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
+        Vec3 hitPos = new Vec3(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
         BlockHitResult hit = new BlockHitResult(hitPos, Direction.UP, pos, false);
-        mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, hit);
+        mc.interactionManager.interactBlock(mc.player, InteractionHand.MAIN_HAND, hit);
     }
 
     /**
@@ -418,7 +418,7 @@ public class B36 extends Module {
             mc.player.currentScreenHandler.syncId,
             tntInvSlot,          // Source slot
             targetHotbarSlot,    // Target slot
-            SlotActionType.SWAP, // Action type - swap the items
+            ContainerInput.SWAP, // Action type - swap the items
             mc.player            // Player
         );
 
