@@ -1,7 +1,7 @@
 package dev.hybridious.utils;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import net.minecraft.item.map.MapState;
+import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -24,7 +24,7 @@ public class MapValidator {
      * @param logResults Whether to log results
      * @return true if map is safe (SFW), false if NSFW
      */
-    public static boolean validateMap(MapState mapState, String apiUrl, Double threshold, boolean logResults) {
+    public static boolean validateMap(MapItemSavedData mapState, String apiUrl, Double threshold, boolean logResults) {
         System.out.println("[MapFilter] ==================== VALIDATION START ====================");
         System.out.println("[MapFilter] API URL: " + apiUrl);
         System.out.println("[MapFilter] Threshold: " + (threshold != null ? threshold : "server default"));
@@ -71,9 +71,9 @@ public class MapValidator {
     }
 
     /**
-     * Convert MapState to base64-encoded PNG
+     * Convert MapItemSavedData to base64-encoded PNG
      */
-    private static String mapStateToBase64(MapState mapState) throws IOException, IllegalAccessException {
+    private static String mapStateToBase64(MapItemSavedData mapState) throws IOException, IllegalAccessException {
         System.out.println("[MapFilter] Creating 128x128 BufferedImage...");
         BufferedImage image = new BufferedImage(128, 128, BufferedImage.TYPE_INT_RGB);
 
@@ -84,14 +84,14 @@ public class MapValidator {
         try {
             // Try direct public access first (might work with Fabric API)
             System.out.println("[MapFilter] Attempting direct field access (colors)...");
-            java.lang.reflect.Field colorsField = MapState.class.getField("colors");
+            java.lang.reflect.Field colorsField = MapItemSavedData.class.getField("colors");
             colors = (byte[]) colorsField.get(mapState);
             System.out.println("[MapFilter] ✓ Success: Direct field access");
         } catch (Exception e1) {
             try {
                 // Try private field named "colors"
                 System.out.println("[MapFilter] Attempting private field access (colors)...");
-                java.lang.reflect.Field colorsField = MapState.class.getDeclaredField("colors");
+                java.lang.reflect.Field colorsField = MapItemSavedData.class.getDeclaredField("colors");
                 colorsField.setAccessible(true);
                 colors = (byte[]) colorsField.get(mapState);
                 System.out.println("[MapFilter] ✓ Success: Private field access");
@@ -99,14 +99,14 @@ public class MapValidator {
                 try {
                     // Try the actual obfuscated field name: field_122
                     System.out.println("[MapFilter] Attempting obfuscated field access (field_122)...");
-                    java.lang.reflect.Field colorsField = MapState.class.getDeclaredField("field_122");
+                    java.lang.reflect.Field colorsField = MapItemSavedData.class.getDeclaredField("field_122");
                     colorsField.setAccessible(true);
                     colors = (byte[]) colorsField.get(mapState);
                     System.out.println("[MapFilter] ✓ Success: Obfuscated field access (field_122)");
                 } catch (Exception e3) {
                     // Last resort: search for byte array field
                     System.out.println("[MapFilter] Attempting to find byte array field...");
-                    for (java.lang.reflect.Field field : MapState.class.getDeclaredFields()) {
+                    for (java.lang.reflect.Field field : MapItemSavedData.class.getDeclaredFields()) {
                         if (field.getType().equals(byte[].class)) {
                             System.out.println("[MapFilter] Found byte array field: " + field.getName());
                             field.setAccessible(true);
@@ -122,7 +122,7 @@ public class MapValidator {
                     if (colors == null) {
                         // Debug: list all fields
                         System.err.println("[MapFilter] Failed to find colors field. Available fields:");
-                        for (java.lang.reflect.Field field : MapState.class.getDeclaredFields()) {
+                        for (java.lang.reflect.Field field : MapItemSavedData.class.getDeclaredFields()) {
                             System.err.println("[MapFilter]   - " + field.getName() + " : " + field.getType());
                         }
                         throw new IOException("Failed to access map colors field", e3);
