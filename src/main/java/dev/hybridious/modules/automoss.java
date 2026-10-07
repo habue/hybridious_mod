@@ -10,29 +10,29 @@ import meteordevelopment.meteorclient.systems.modules.Modules;
 import meteordevelopment.meteorclient.utils.player.Rotations;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.ShulkerBoxBlock;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.component.type.ContainerComponent;
-import net.minecraft.client.gui.screen.ingame.InventoryScreen;
-import net.minecraft.entity.EntityPose;
-import net.minecraft.item.BlockItem;
-import net.minecraft.item.BoneMealItem;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.ShulkerBoxBlock;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.item.component.ItemContainerContents;
+import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.world.entity.Pose;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.BoneMealItem;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
 import meteordevelopment.meteorclient.systems.modules.render.FreeLook;
-import net.minecraft.registry.Registries;
-import net.minecraft.screen.slot.SlotActionType;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.LightType;
-import net.minecraft.world.RaycastContext;
+import net.minecraft.core.registries.BuiltInBuiltInRegistries;
+import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.LightLayer;
+import net.minecraft.world.level.ClipContext;
 
 import java.util.*;
 
@@ -318,7 +318,7 @@ public class automoss extends Module {
     private int     killAuraScanCooldown   = 0;
     private boolean killAuraActiveThisTick = false;
 
-    private Vec3d lastProgressPos    = null;
+    private Vec3 lastProgressPos    = null;
     private int   noProgressTicks    = 0;
     private long  lastBonemealMillis = 0;
 
@@ -438,13 +438,13 @@ public class automoss extends Module {
                 ItemStack grid = mc.player.playerScreenHandler.getSlot(CRAFT_GRID_SLOT).getStack();
                 if (!grid.isEmpty())
                     mc.interactionManager.clickSlot(useSyncId, CRAFT_GRID_SLOT, 0,
-                            SlotActionType.QUICK_MOVE, mc.player);
+                            ClickType.QUICK_MOVE, mc.player);
             } catch (Throwable ignored) {}
             // Drop cursor
             try {
                 if (!mc.player.playerScreenHandler.getCursorStack().isEmpty())
                     mc.interactionManager.clickSlot(useSyncId, CRAFT_GRID_SLOT, 0,
-                            SlotActionType.PICKUP, mc.player);
+                            ClickType.PICKUP, mc.player);
             } catch (Throwable ignored) {}
             // Close
             try { mc.player.closeHandledScreen(); } catch (Throwable ignored) {}
@@ -1100,7 +1100,7 @@ public class automoss extends Module {
                 applyBonemeal(boneMealSlot, pos, fh.hit(), fh.dir());
             } else {
                 final int slot = boneMealSlot; final BlockPos posF = pos;
-                final Vec3d hitF = fh.hit(); final Direction faceF = fh.dir();
+                final Vec3 hitF = fh.hit(); final Direction faceF = fh.dir();
                 double[] yp = lookAt(hitF);
                 int priority = isMoving() ? movingRotationPriority.get() : 100;
                 rotateOnce(yp[0], yp[1], priority, () -> {
@@ -1116,7 +1116,7 @@ public class automoss extends Module {
         }
     }
 
-    private void applyBonemeal(int slot, BlockPos pos, Vec3d hitVec, Direction face) {
+    private void applyBonemeal(int slot, BlockPos pos, Vec3 hitVec, Direction face) {
         if (mc.player == null || mc.interactionManager == null) return;
         BlockHitResult hit = new BlockHitResult(hitVec, face, pos, false);
         int prev = selectHotbarSynced(slot);
@@ -1186,17 +1186,17 @@ public class automoss extends Module {
         return out;
     }
 
-    private record FaceHit(Vec3d hit, Direction dir) {}
-    private record SeedPlace(BlockPos support, Vec3d hit, Direction dir, double distanceSq, boolean dry) {}
+    private record FaceHit(Vec3 hit, Direction dir) {}
+    private record SeedPlace(BlockPos support, Vec3 hit, Direction dir, double distanceSq, boolean dry) {}
 
     private FaceHit pickBonemealFace(BlockPos pos) {
         if (mc.player == null || mc.world == null) return null;
-        Vec3d eye = mc.player.getEyePos();
+        Vec3 eye = mc.player.getEyePos();
         double maxReachSq = Math.min(range.get(), 4.4) * Math.min(range.get(), 4.4);
         Direction[] faces = bonemealSideFaces.get() ? Direction.values() : new Direction[]{Direction.UP};
         FaceHit best = null; double bestDSq = Double.MAX_VALUE;
         for (Direction dir : faces) {
-            Vec3d fc = faceCenter(pos, dir); double dSq = eye.squaredDistanceTo(fc);
+            Vec3 fc = faceCenter(pos, dir); double dSq = eye.squaredDistanceTo(fc);
             if (dSq > maxReachSq) continue;
             if (!faceVisible(pos, dir, fc, eye)) continue;
             if (dSq < bestDSq) { bestDSq = dSq; best = new FaceHit(fc, dir); }
@@ -1204,13 +1204,13 @@ public class automoss extends Module {
         return best;
     }
 
-    private Vec3d faceCenter(BlockPos pos, Direction dir) {
-        return new Vec3d(pos.getX() + 0.5 + dir.getOffsetX() * 0.5,
+    private Vec3 faceCenter(BlockPos pos, Direction dir) {
+        return new Vec3(pos.getX() + 0.5 + dir.getOffsetX() * 0.5,
                 pos.getY() + 0.5 + dir.getOffsetY() * 0.5,
                 pos.getZ() + 0.5 + dir.getOffsetZ() * 0.5);
     }
 
-    private boolean faceVisible(BlockPos pos, Direction dir, Vec3d fc, Vec3d eye) {
+    private boolean faceVisible(BlockPos pos, Direction dir, Vec3 fc, Vec3 eye) {
         if (mc.world == null) return false;
         BlockPos neighbor = pos.offset(dir);
         BlockState ns = mc.world.getBlockState(neighbor);
@@ -1222,18 +1222,18 @@ public class automoss extends Module {
                         && (bb.maxZ - bb.minZ) >= 0.999 && ns.isOpaque()) return false;
             }
         }
-        RaycastContext ctx = new RaycastContext(eye, fc, RaycastContext.ShapeType.COLLIDER,
-                RaycastContext.FluidHandling.NONE, mc.player);
+        ClipContext ctx = new ClipContext(eye, fc, ClipContext.ShapeType.COLLIDER,
+                ClipContext.FluidHandling.NONE, mc.player);
         BlockPos hitPos = mc.world.raycast(ctx).getBlockPos();
         return hitPos.equals(pos) || hitPos.equals(neighbor);
     }
 
     private boolean hasAnyVisibleFace(BlockPos pos) {
         if (mc.player == null || mc.world == null) return false;
-        Vec3d eye = mc.player.getEyePos();
+        Vec3 eye = mc.player.getEyePos();
         double maxRSq = Math.min(range.get(), 4.4) * Math.min(range.get(), 4.4);
         for (Direction dir : Direction.values()) {
-            Vec3d fc = faceCenter(pos, dir);
+            Vec3 fc = faceCenter(pos, dir);
             if (eye.squaredDistanceTo(fc) > maxRSq) continue;
             if (faceVisible(pos, dir, fc, eye)) return true;
         }
@@ -1241,9 +1241,9 @@ public class automoss extends Module {
     }
 
     private boolean hasLineOfSight(BlockPos pos) {
-        Vec3d center = new Vec3d(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
-        RaycastContext ctx = new RaycastContext(mc.player.getEyePos(), center,
-                RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player);
+        Vec3 center = new Vec3(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
+        ClipContext ctx = new ClipContext(mc.player.getEyePos(), center,
+                ClipContext.ShapeType.COLLIDER, ClipContext.FluidHandling.NONE, mc.player);
         return mc.world.raycast(ctx).getBlockPos().equals(pos);
     }
 
@@ -1285,7 +1285,7 @@ public class automoss extends Module {
     private boolean isOutdoorSurface(BlockPos pos) {
         if (mc.world == null) return false;
         if (mc.world.isSkyVisible(pos.up())) return true;
-        if (mc.world.getLightLevel(LightType.SKY, pos.up()) >= 12) return true;
+        if (mc.world.getLightLevel(LightLayer.SKY, pos.up()) >= 12) return true;
         for (int dy = 1; dy <= 16; dy++) {
             BlockState st = mc.world.getBlockState(pos.up(dy));
             if (st.isAir()) continue;
@@ -1304,7 +1304,7 @@ public class automoss extends Module {
         if (mc.player == null) return;
         if (touchingWater()) { lastProgressPos = mc.player.getPos(); noProgressTicks = 0; return; }
         if (killAuraActiveThisTick && killAuraCompat.get()) { lastProgressPos = mc.player.getPos(); noProgressTicks = 0; return; }
-        Vec3d now = mc.player.getPos();
+        Vec3 now = mc.player.getPos();
         if (lastProgressPos == null) { lastProgressPos = now; return; }
         double moved = now.distanceTo(lastProgressPos);
         boolean madeProgress = moved >= stuckThreshold.get() || (System.currentTimeMillis() - lastBonemealMillis) < 2000L;
@@ -1376,7 +1376,7 @@ public class automoss extends Module {
         SeedPlace seed = findBestSeedPlacement();
         if (seed == null) { placeMossTimer = Math.max(1, placeMossRetryDelay.get()); return; }
         final BlockPos supportF = seed.support(), placeAtF = supportF.offset(seed.dir());
-        final Vec3d hitF = seed.hit(); final Direction faceF = seed.dir(); final int slotF = mossSlot;
+        final Vec3 hitF = seed.hit(); final Direction faceF = seed.dir(); final int slotF = mossSlot;
         double[] yp = lookAt(hitF);
         int priority = isMoving() ? movingRotationPriority.get() : 100;
         placeMossTimer = Math.max(1, placeMossRetryDelay.get());
@@ -1403,7 +1403,7 @@ public class automoss extends Module {
 
     private SeedPlace findBestSeedPlacementPass(boolean enforceLargeAreaMinimum) {
         if (mc.player == null || mc.world == null) return null;
-        Vec3d eye = mc.player.getEyePos(); BlockPos feet = mc.player.getBlockPos();
+        Vec3 eye = mc.player.getEyePos(); BlockPos feet = mc.player.getBlockPos();
         double maxReach = Math.min(range.get(), 4.35), maxReachSq = maxReach * maxReach;
         SeedPlace best = null; double bestScore = Double.MAX_VALUE;
         int horizontal = Math.max(3, Math.min(5, (int) Math.ceil(range.get())));
@@ -1455,13 +1455,13 @@ public class automoss extends Module {
         return score;
     }
 
-    private SeedPlace raycastSeedPlacement(BlockPos support, Vec3d eye, BlockPos feet, double maxReachSq) {
-        BlockPos placeAt = support.up(); Vec3d aim = insetFaceHit(support, Direction.UP, eye);
+    private SeedPlace raycastSeedPlacement(BlockPos support, Vec3 eye, BlockPos feet, double maxReachSq) {
+        BlockPos placeAt = support.up(); Vec3 aim = insetFaceHit(support, Direction.UP, eye);
         double distSq = eye.squaredDistanceTo(aim);
         if (distSq > maxReachSq) return null;
         if (!canPlaceSeedAt(placeAt, feet)) return null;
-        RaycastContext ctx = new RaycastContext(eye, aim, RaycastContext.ShapeType.OUTLINE,
-                RaycastContext.FluidHandling.NONE, mc.player);
+        ClipContext ctx = new ClipContext(eye, aim, ClipContext.ShapeType.OUTLINE,
+                ClipContext.FluidHandling.NONE, mc.player);
         BlockHitResult hit = mc.world.raycast(ctx);
         if (hit.getBlockPos().equals(support) && hit.getSide() == Direction.UP)
             return new SeedPlace(support, hit.getPos(), Direction.UP, distSq, true);
@@ -1473,7 +1473,7 @@ public class automoss extends Module {
         return null;
     }
 
-    private Vec3d insetFaceHit(BlockPos pos, Direction dir, Vec3d eye) {
+    private Vec3 insetFaceHit(BlockPos pos, Direction dir, Vec3 eye) {
         double x = pos.getX() + 0.5 + dir.getOffsetX() * 0.5;
         double y = pos.getY() + 0.5 + dir.getOffsetY() * 0.5;
         double z = pos.getZ() + 0.5 + dir.getOffsetZ() * 0.5;
@@ -1489,7 +1489,7 @@ public class automoss extends Module {
             double cz = pos.getZ() + 0.5;
             z = Math.max(pos.getZ() + 0.18, Math.min(pos.getZ() + 0.82, cz + Math.signum(eye.z - cz) * 0.22));
         }
-        return new Vec3d(x, y, z);
+        return new Vec3(x, y, z);
     }
 
     private boolean isReliableSeedSupport(BlockPos pos) {
@@ -1706,14 +1706,14 @@ public class automoss extends Module {
 
                     if (!mc.player.playerScreenHandler.getCursorStack().isEmpty()) {
                         mc.interactionManager.clickSlot(sid, ssrc, 0,
-                                SlotActionType.PICKUP, mc.player);
+                                ClickType.PICKUP, mc.player);
                     }
 
                     mc.interactionManager.clickSlot(sid, ssrc, 1,
-                            SlotActionType.PICKUP, mc.player);
+                            ClickType.PICKUP, mc.player);
 
                     mc.interactionManager.clickSlot(sid, CRAFT_GRID_SLOT, 0,
-                            SlotActionType.PICKUP, mc.player);
+                            ClickType.PICKUP, mc.player);
                 });
 
                 craftState        = CraftState.COLLECT;
@@ -1731,17 +1731,17 @@ public class automoss extends Module {
                     ItemStack output = mc.player.playerScreenHandler.getSlot(CRAFT_OUTPUT_SLOT).getStack();
                     if (!output.isEmpty()) {
                         mc.interactionManager.clickSlot(sid, CRAFT_OUTPUT_SLOT, 0,
-                                SlotActionType.QUICK_MOVE, mc.player);
+                                ClickType.QUICK_MOVE, mc.player);
                     }
                     ItemStack grid = mc.player.playerScreenHandler.getSlot(CRAFT_GRID_SLOT).getStack();
                     if (!grid.isEmpty()) {
                         mc.interactionManager.clickSlot(sid, CRAFT_GRID_SLOT, 0,
-                                SlotActionType.QUICK_MOVE, mc.player);
+                                ClickType.QUICK_MOVE, mc.player);
                     }
                     if (!mc.player.playerScreenHandler.getCursorStack().isEmpty()) {
                         int dropBack = (craftSrcSlot >= 0) ? craftSrcSlot : INV_FIRST;
                         mc.interactionManager.clickSlot(sid, dropBack, 0,
-                                SlotActionType.PICKUP, mc.player);
+                                ClickType.PICKUP, mc.player);
                     }
                 });
 
@@ -1780,7 +1780,7 @@ public class automoss extends Module {
                     if (bestSrc == -1) return;
                     int hotbarButton = targetSlot - HOTBAR_FIRST_HANDLER;
                     mc.interactionManager.clickSlot(sid, bestSrc, hotbarButton,
-                            SlotActionType.SWAP, mc.player);
+                            ClickType.SWAP, mc.player);
                 });
 
                 craftState        = CraftState.CLOSE;
@@ -1798,14 +1798,14 @@ public class automoss extends Module {
                     ItemStack out = mc.player.playerScreenHandler.getSlot(CRAFT_OUTPUT_SLOT).getStack();
                     if (!out.isEmpty())
                         mc.interactionManager.clickSlot(sid, CRAFT_OUTPUT_SLOT, 0,
-                                SlotActionType.QUICK_MOVE, mc.player);
+                                ClickType.QUICK_MOVE, mc.player);
                     ItemStack grid = mc.player.playerScreenHandler.getSlot(CRAFT_GRID_SLOT).getStack();
                     if (!grid.isEmpty())
                         mc.interactionManager.clickSlot(sid, CRAFT_GRID_SLOT, 0,
-                                SlotActionType.QUICK_MOVE, mc.player);
+                                ClickType.QUICK_MOVE, mc.player);
                     if (!mc.player.playerScreenHandler.getCursorStack().isEmpty()) {
                         mc.interactionManager.clickSlot(sid, INV_FIRST, 0,
-                                SlotActionType.PICKUP, mc.player);
+                                ClickType.PICKUP, mc.player);
                     }
                     mc.player.closeHandledScreen();
                 });
@@ -1855,8 +1855,8 @@ public class automoss extends Module {
     }
 
     private boolean shulkerContainsBoneBlocks(ItemStack shulkerStack) {
-        ContainerComponent container = shulkerStack.getOrDefault(
-                DataComponentTypes.CONTAINER, ContainerComponent.DEFAULT);
+        ItemContainerContents container = shulkerStack.getOrDefault(
+                DataComponents.CONTAINER, ItemContainerContents.DEFAULT);
         return container.streamNonEmpty().anyMatch(stack -> stack.getItem() == Items.BONE_BLOCK);
     }
 
@@ -1975,8 +1975,8 @@ public class automoss extends Module {
 
     private boolean isProne() {
         if (mc.player == null) return false;
-        EntityPose p = mc.player.getPose();
-        return p == EntityPose.SWIMMING || mc.player.isCrawling();
+        Pose p = mc.player.getPose();
+        return p == Pose.SWIMMING || mc.player.isCrawling();
     }
 
     private boolean touchingWater() {
@@ -1993,7 +1993,7 @@ public class automoss extends Module {
             BlockState st = mc.world.getBlockState(above);
             if (st.isAir() || !st.getFluidState().isEmpty()) continue;
             if (st.getHardness(mc.world, above) < 0) continue;
-            Vec3d hv = new Vec3d(above.getX() + 0.5, above.getY(), above.getZ() + 0.5);
+            Vec3 hv = new Vec3(above.getX() + 0.5, above.getY(), above.getZ() + 0.5);
             double[] yp = lookAt(hv); final BlockPos aboveF = above;
             rotateOnce(yp[0], yp[1], 100, true, () -> {
                 if (mc.player == null || mc.world == null || mc.interactionManager == null) return;
@@ -2036,7 +2036,7 @@ public class automoss extends Module {
             pillarPhase = 1; pillarStepTimer = pillarStepDelay.get(); return true;
         }
         final BlockPos againstF = against; final int slotF = pillarSlot;
-        Vec3d hv = new Vec3d(againstF.getX() + 0.5, againstF.getY() + 1.0, againstF.getZ() + 0.5);
+        Vec3 hv = new Vec3(againstF.getX() + 0.5, againstF.getY() + 1.0, againstF.getZ() + 0.5);
         double[] yp = lookAt(hv);
         int prevSlot = mc.player.getInventory().selectedSlot;
         mc.player.getInventory().selectedSlot = pillarSlot;
@@ -2074,7 +2074,7 @@ public class automoss extends Module {
                     if (!mc.player.getInventory().getStack(hot).isEmpty()) continue;
                     if (!tryConsumePacket(1)) break;
                     mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId,
-                            playerInvToHandlerSlot(inv), hot, SlotActionType.SWAP, mc.player);
+                            playerInvToHandlerSlot(inv), hot, ClickType.SWAP, mc.player);
                     return hot;
                 }
                 break;
@@ -2125,8 +2125,8 @@ public class automoss extends Module {
     private int clampZ(int z) { return Math.max(sectorMinZ(), Math.min(z, sectorMaxZ())); }
 
 
-    private double[] lookAt(Vec3d target) {
-        Vec3d eye = mc.player.getEyePos();
+    private double[] lookAt(Vec3 target) {
+        Vec3 eye = mc.player.getEyePos();
         double dx = target.x - eye.x, dy = target.y - eye.y, dz = target.z - eye.z;
         double horiz = Math.sqrt(dx * dx + dz * dz);
         return new double[]{ Math.toDegrees(Math.atan2(dz, dx)) - 90.0, -Math.toDegrees(Math.atan2(dy, horiz)) };
@@ -2160,7 +2160,7 @@ public class automoss extends Module {
                 if (BaritoneAPI.getProvider().getPrimaryBaritone().getPathingBehavior().isPathing()) return true;
             } catch (Throwable ignored) {}
         }
-        Vec3d v = mc.player.getVelocity();
+        Vec3 v = mc.player.getVelocity();
         return (v.x * v.x + v.z * v.z) > 0.0025;
     }
 
@@ -2170,7 +2170,7 @@ public class automoss extends Module {
         if (slot < 0 || slot > 8 || slot == prev) return prev;
         mc.player.getInventory().selectedSlot = slot;
         if (mc.player.networkHandler != null && tryConsumePacket(1))
-            mc.player.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(slot));
+            mc.player.networkHandler.sendPacket(new ServerboundSetCarriedItemPacket(slot));
         return prev;
     }
 
@@ -2178,7 +2178,7 @@ public class automoss extends Module {
         if (prev < 0 || prev > 8 || mc.player.getInventory().selectedSlot == prev) return;
         mc.player.getInventory().selectedSlot = prev;
         if (mc.player.networkHandler != null && tryConsumePacket(1))
-            mc.player.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(prev));
+            mc.player.networkHandler.sendPacket(new ServerboundSetCarriedItemPacket(prev));
     }
 
 
@@ -2213,7 +2213,7 @@ public class automoss extends Module {
                     if (!mc.player.getInventory().getStack(hot).isEmpty()) continue;
                     if (!tryConsumePacket(1)) break;
                     mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId,
-                            playerInvToHandlerSlot(inv), hot, SlotActionType.SWAP, mc.player);
+                            playerInvToHandlerSlot(inv), hot, ClickType.SWAP, mc.player);
                     return hot;
                 }
                 break;
@@ -2233,7 +2233,7 @@ public class automoss extends Module {
                     if (!mc.player.getInventory().getStack(hot).isEmpty()) continue;
                     if (!tryConsumePacket(1)) break;
                     mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId,
-                            playerInvToHandlerSlot(inv), hot, SlotActionType.SWAP, mc.player);
+                            playerInvToHandlerSlot(inv), hot, ClickType.SWAP, mc.player);
                     return hot;
                 }
                 break;
