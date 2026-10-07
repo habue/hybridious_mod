@@ -1,6 +1,6 @@
 package dev.hybridious.modules;
 import dev.hybridious.Hybridious;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.core.BlockPos;
 import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
@@ -11,11 +11,11 @@ import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.vehicle.HopperMinecartEntity;
-import net.minecraft.entity.vehicle.ChestMinecartEntity;
-import net.minecraft.entity.vehicle.AbstractMinecartEntity;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.vehicle.MinecartHopper;
+import net.minecraft.world.entity.vehicle.MinecartChest;
+import net.minecraft.world.entity.vehicle.AbstractMinecart;
+import net.minecraft.world.phys.Vec3;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -426,7 +426,7 @@ public class MinecartDetector extends Module {
         stackedMinecarts.clear();
         offRailsMinecarts.clear();
 
-        Vec3d playerPos = mc.player.getPos();
+        Vec3 playerPos = mc.player.getPos();
 
         // Track current session locations
         Set<String> currentWrongDirectionLocations = new HashSet<>();
@@ -440,11 +440,11 @@ public class MinecartDetector extends Module {
             // Count minecarts for alert feature
             if (enableCountAlert.get()) {
                 if (countAllMinecarts.get()) {
-                    if (entity instanceof AbstractMinecartEntity) {
+                    if (entity instanceof AbstractMinecart) {
                         totalMinecartCount++;
                     }
                 } else {
-                    if (entity instanceof ChestMinecartEntity || entity instanceof HopperMinecartEntity) {
+                    if (entity instanceof MinecartChest || entity instanceof MinecartHopper) {
                         totalMinecartCount++;
                     }
                 }
@@ -453,18 +453,18 @@ public class MinecartDetector extends Module {
             // Check for hopper minecarts facing wrong direction
             // Both hoppers and chests need correct orientation for item flow
             if (highlightIncorrectDirection.get() &&
-                    (entity instanceof HopperMinecartEntity || entity instanceof ChestMinecartEntity)) {
+                    (entity instanceof MinecartHopper || entity instanceof MinecartChest)) {
                 checkMinecartDirection(entity, currentWrongDirectionLocations);
             }
 
             // Check for minecarts not on rails
-            if (detectOffRails.get() && entity instanceof AbstractMinecartEntity) {
-                checkOffRails((AbstractMinecartEntity) entity, currentOffRailsLocations);
+            if (detectOffRails.get() && entity instanceof AbstractMinecart) {
+                checkOffRails((AbstractMinecart) entity, currentOffRailsLocations);
             }
 
             // Collect container minecarts for stacking check (chest and hopper)
             if (detectEntityStacking.get() &&
-                    (entity instanceof ChestMinecartEntity || entity instanceof HopperMinecartEntity)) {
+                    (entity instanceof MinecartChest || entity instanceof MinecartHopper)) {
                 containerMinecarts.add(entity);
             }
         }
@@ -540,10 +540,10 @@ public class MinecartDetector extends Module {
 
         // Alert if needed
         if (shouldAlert) {
-            Vec3d pos = entity.getPos();
+            Vec3 pos = entity.getPos();
             float yaw = entity.getYaw();
             String serverName = getServerName();
-            String minecartType = getMinecartTypeName((AbstractMinecartEntity) entity);
+            String minecartType = getMinecartTypeName((AbstractMinecart) entity);
 
             // Send chat notification
             if (notifyWrongDirection.get()) {
@@ -579,7 +579,7 @@ public class MinecartDetector extends Module {
         }
     }
 
-    private void checkOffRails(AbstractMinecartEntity entity, Set<String> currentOffRailsLocations) {
+    private void checkOffRails(AbstractMinecart entity, Set<String> currentOffRailsLocations) {
         // Check if minecart is on rails
         BlockPos entityPos = entity.getBlockPos();
 
@@ -642,7 +642,7 @@ public class MinecartDetector extends Module {
 
         // Alert if needed
         if (shouldAlert) {
-            Vec3d pos = entity.getPos();
+            Vec3 pos = entity.getPos();
             String serverName = getServerName();
             String minecartType = getMinecartTypeName(entity);
 
@@ -679,15 +679,15 @@ public class MinecartDetector extends Module {
         }
     }
 
-    private boolean isRailBlock(net.minecraft.block.BlockState state) {
+    private boolean isRailBlock(net.minecraft.world.level.block.state.BlockState state) {
         // Check if the block is any type of rail using AbstractRailBlock
         return state.getBlock() instanceof net.minecraft.block.AbstractRailBlock;
     }
 
-    private String getMinecartTypeName(AbstractMinecartEntity entity) {
-        if (entity instanceof ChestMinecartEntity) {
+    private String getMinecartTypeName(AbstractMinecart entity) {
+        if (entity instanceof MinecartChest) {
             return "Chest minecart";
-        } else if (entity instanceof HopperMinecartEntity) {
+        } else if (entity instanceof MinecartHopper) {
             return "Hopper minecart";
         } else if (entity instanceof net.minecraft.entity.vehicle.FurnaceMinecartEntity) {
             return "Furnace minecart";
@@ -709,11 +709,11 @@ public class MinecartDetector extends Module {
 
         for (int i = 0; i < size; i++) {
             Entity minecart1 = containerMinecarts.get(i);
-            Vec3d pos1 = minecart1.getPos();
+            Vec3 pos1 = minecart1.getPos();
 
             for (int j = i + 1; j < size; j++) {
                 Entity minecart2 = containerMinecarts.get(j);
-                Vec3d pos2 = minecart2.getPos();
+                Vec3 pos2 = minecart2.getPos();
 
                 double distance = pos1.distanceTo(pos2);
 
@@ -734,8 +734,8 @@ public class MinecartDetector extends Module {
                     if (!knownStackedLocations.containsKey(locationKey)) {
                         // New stacked location found
                         String serverName = getServerName();
-                        String type1 = getMinecartTypeName((AbstractMinecartEntity) minecart1);
-                        String type2 = getMinecartTypeName((AbstractMinecartEntity) minecart2);
+                        String type1 = getMinecartTypeName((AbstractMinecart) minecart1);
+                        String type2 = getMinecartTypeName((AbstractMinecart) minecart2);
 
                         if (streamingMode.get()) {
                             ChatUtils.warning(String.format("[MinecartDetector] Stacked minecarts detected on %s (coordinates hidden)", serverName));
@@ -889,13 +889,13 @@ public class MinecartDetector extends Module {
         if (mc.player == null) return;
 
         // Get camera position
-        Vec3d eyes = mc.player.getEyePos();
+        Vec3 eyes = mc.player.getEyePos();
 
         // In first person, start tracer slightly forward from camera to make it more visible
-        Vec3d startPos = eyes;
+        Vec3 startPos = eyes;
         if (mc.options.getPerspective().isFirstPerson()) {
             // Get look direction and start tracer 0.5 blocks forward
-            Vec3d lookVec = mc.player.getRotationVec(event.tickDelta);
+            Vec3 lookVec = mc.player.getRotationVec(event.tickDelta);
             startPos = eyes.add(lookVec.multiply(0.5));
         }
 
